@@ -1,6 +1,6 @@
 import asyncio
 import time
-from typing import Set, Dict, List
+from typing import Set, Dict, List, Tuple
 from datetime import datetime, timedelta
 from telegram import Update, Message
 from telegram.ext import CallbackContext, CommandHandler
@@ -10,18 +10,18 @@ from shivu import application, top_global_groups_collection, pm_users
 
 # --- Configuration ---
 # Replace these with your actual IDs
-OWNER_ID = 8420981179  # Replace with your owner ID
-SUDO_USERS = [8420981179, 7818323042, 8420981179]  # Replace with your sudo users
+OWNER_ID = 8453236527  # Replace with your owner ID
+SUDO_USERS = [8420981179, 7818323042]  # Replace with your sudo users
 
 # Create authorized users list (Owner + Sudo Users)
 AUTHORIZED_USERS = [OWNER_ID] + SUDO_USERS
 
 # Broadcast settings
-MAX_CONCURRENT_TASKS = 100
-BATCH_SIZE = 35
-MAX_RETRIES = 2
-TTL_HOURS = 12
-FLOOD_WAIT_BASE = 1
+MAX_CONCURRENT_TASKS = 100  # Maximum parallel sends
+BATCH_SIZE = 35  # Chunk size for processing
+MAX_RETRIES = 2  # Retry attempts for temporary failures
+TTL_HOURS = 12  # Cache duration for failed users
+FLOOD_WAIT_BASE = 1  # Base wait time for flood control
 
 # --- Small Caps Font Converter ---
 SMALL_CAPS_MAP = {
@@ -58,6 +58,7 @@ class Style:
     COMPLETE = to_small_caps("✨ BROADCAST COMPLETED")
     STARTING = to_small_caps("🚀 STARTING BROADCAST")
     IN_PROGRESS = to_small_caps("📤 BROADCASTING")
+    LIVE_STATS = to_small_caps("📈 LIVE STATISTICS")
     LINE = "━" * 30
 
 # --- Global Broadcast Lock ---
@@ -116,7 +117,8 @@ async def send_message_batch(
     chat_ids: List[int],
     semaphore: asyncio.Semaphore,
     failed_cache: TemporaryFailureCache,
-    stats: Dict[str, int]
+    stats: Dict[str, int],
+    invalid_chats: List[int]
 ) -> None:
     """Send message to a batch of users with optimal concurrency"""
     
@@ -164,6 +166,9 @@ async def send_message_batch(
                     
                     if any(err in error_msg for err in permanent_errors):
                         stats["invalid"] += 1
+                        # Add to invalid_chats for cleanup
+                        invalid_chats.append(chat_id)
+                        # Add to TTL cache for future broadcasts
                         await add_to_ttl_cache(chat_id)
                     else:
                         failed_cache.add_failed(chat_id)
@@ -214,6 +219,44 @@ def generate_premium_report(stats: Dict[str, int], total_targets: int, elapsed_t
     
     return "\n".join(report_lines)
 
+# --- Live Statistics Generator ---
+def generate_live_stats(
+    stats: Dict[str, int], 
+    current_chunk: int, 
+    total_chunks: int, 
+    elapsed_time: float
+) -> str:
+    """Generate live statistics for progress updates"""
+    
+    progress_percent = ((current_chunk + 1) / total_chunks * 100) if total_chunks > 0 else 0
+    users_per_second = stats["success"] / max(1, elapsed_time)
+    
+    return (
+        f"<b>{Style.IN_PROGRESS}</b>\n"
+        f"<code>{Style.LINE}</code>\n"
+        f"📊 <b>ᴘʀᴏɢʀᴇꜱꜱ:</b> <code>{current_chunk + 1}/{total_chunks} chunks</code>\n"
+        f"📈 <b>ᴄᴏᴍᴘʟᴇᴛᴇᴅ:</b> <code>{progress_percent:.1f}%</code>\n"
+        f"<code>{Style.LINE}</code>\n"
+        f"<b>{Style.LIVE_STATS}</b>\n"
+        f"✅ <b>ꜱᴜᴄᴄᴇꜱꜱꜰᴜʟ:</b> <code>{stats['success']:,}</code>\n"
+        f"🔄 <b>ᴛᴇᴍᴘ ᴇʀʀᴏʀꜱ:</b> <code>{stats['failed']:,}</code>\n"
+        f"🚫 <b>ᴘᴇʀᴍ ᴇʀʀᴏʀꜱ:</b> <code>{stats['invalid']:,}</code>\n"
+        f"⏳ <b>ꜰʟᴏᴏᴅᴇᴅ:</b> <code>{stats['flood']:,}</code>\n"
+        f"📦 <b>ᴄᴀᴄʜᴇᴅ:</b> <code>{stats['cached']:,}</code>\n"
+        f"<code>{Style.LINE}</code>\n"
+        f"⚡ <b>ꜱᴘᴇᴇᴅ:</b> <code>{users_per_second:.1f} users/sec</code>\n"
+        f"⏱️ <b>ᴇʟᴀᴘꜱᴇᴅ:</b> <code>{elapsed_time:.1f}s</code>"
+    )
+
+# --- Fixed Group ID Formatter ---
+def format_group_id(group_id: int) -> int:
+    """Format group ID to Telegram's supergroup format"""
+    # If group_id is positive, convert to negative with -100 prefix
+    if isinstance(group_id, int) and group_id > 0:
+        # Convert to string, add -100 prefix, then back to int
+        return int(f"-100{group_id}")
+    return group_id
+
 # --- Main Broadcast Function ---
 async def broadcast(update: Update, context: CallbackContext) -> None:
     """Premium broadcast system with multi-user access control"""
@@ -243,6 +286,10 @@ async def broadcast(update: Update, context: CallbackContext) -> None:
         # Set broadcast flag
         is_broadcasting = True
     
+    # Initialize variables for cleanup
+    invalid_chats = []  # List of chat_ids for cleanup
+    status_msg = None
+    
     try:
         # Get message to broadcast
         message_to_broadcast = update.message.reply_to_message
@@ -264,14 +311,35 @@ async def broadcast(update: Update, context: CallbackContext) -> None:
             parse_mode='HTML'
         )
         
-        # Fetch targets concurrently
-        async def fetch_targets():
+        # --- FIXED: Fetch targets with group ID formatting ---
+        async def fetch_targets() -> List[int]:
+            """Fetch all targets with proper group ID formatting"""
+            
+            # Fetch groups and users concurrently
             chats_task = top_global_groups_collection.distinct("group_id")
             users_task = pm_users.distinct("_id")
-            return await asyncio.gather(chats_task, users_task)
+            raw_chats, raw_users = await asyncio.gather(chats_task, users_task)
+            
+            # Format group IDs
+            formatted_targets = []
+            
+            # Process groups with ID formatting
+            for group_id in raw_chats:
+                if group_id:  # Skip None or empty values
+                    formatted_id = format_group_id(group_id)
+                    formatted_targets.append(formatted_id)
+            
+            # Process users (no formatting needed)
+            for user_id in raw_users:
+                if user_id:  # Skip None or empty values
+                    formatted_targets.append(user_id)
+            
+            # Remove duplicates
+            unique_targets = list(set(formatted_targets))
+            return unique_targets
         
         try:
-            all_chats, all_users = await fetch_targets()
+            all_targets = await fetch_targets()
         except Exception as e:
             await status_msg.edit_text(
                 f"<b>❌ {to_small_caps('DATABASE ERROR')}</b>\n"
@@ -281,15 +349,14 @@ async def broadcast(update: Update, context: CallbackContext) -> None:
             is_broadcasting = False
             return
         
-        all_targets = list(set(all_chats + all_users))
         total_targets = len(all_targets)
         
         # Update status with target count
         await status_msg.edit_text(
             f"<b>{Style.STARTING}</b>\n"
-            f"<i>Targets loaded: {total_targets:,} users</i>\n"
+            f"<i>Targets loaded: {total_targets:,} users & groups</i>\n"
             f"<code>{Style.LINE}</code>\n"
-            f"⚡ <i>Starting broadcast...</i>",
+            f"⚡ <i>Starting broadcast with {MAX_CONCURRENT_TASKS} concurrent workers...</i>",
             parse_mode='HTML'
         )
         
@@ -308,27 +375,15 @@ async def broadcast(update: Update, context: CallbackContext) -> None:
                 chunk, 
                 semaphore, 
                 failed_cache, 
-                stats
+                stats,
+                invalid_chats
             )
             
-            # Update progress every 5 chunks
-            if i % 5 == 0 or i == len(chunks) - 1:
+            # Update live stats every 10 chunks
+            if i % 10 == 0 or i == len(chunks) - 1:
                 elapsed = time.time() - start_time
-                remaining = ((len(chunks) - i) * elapsed / max(1, i)) if i > 0 else 0
-                
-                progress_percent = ((i + 1) / len(chunks)) * 100
-                
-                await status_msg.edit_text(
-                    f"<b>{Style.IN_PROGRESS}</b>\n"
-                    f"<code>{Style.LINE}</code>\n"
-                    f"📊 <b>ᴘʀᴏɢʀᴇꜱꜱ:</b> <code>{i+1}/{len(chunks)} chunks</code>\n"
-                    f"📈 <b>ᴄᴏᴍᴘʟᴇᴛᴇᴅ:</b> <code>{progress_percent:.1f}%</code>\n"
-                    f"✅ <b>ꜱᴇɴᴛ:</b> <code>{stats['success']:,}</code>\n"
-                    f"⏱️ <b>ᴇʟᴀᴘꜱᴇᴅ:</b> <code>{elapsed:.1f}s</code>\n"
-                    f"⏳ <b>ʀᴇᴍᴀɪɴɪɴɢ:</b> <code>~{remaining:.1f}s</code>\n"
-                    f"<code>{Style.LINE}</code>",
-                    parse_mode='HTML'
-                )
+                live_stats = generate_live_stats(stats, i, len(chunks), elapsed)
+                await status_msg.edit_text(live_stats, parse_mode='HTML')
         
         # Retry temporary failures
         retryable = failed_cache.get_retryable()
@@ -348,7 +403,8 @@ async def broadcast(update: Update, context: CallbackContext) -> None:
                     chunk, 
                     semaphore, 
                     TemporaryFailureCache(),
-                    stats
+                    stats,
+                    invalid_chats
                 )
         
         # Final statistics
@@ -376,7 +432,7 @@ async def broadcast(update: Update, context: CallbackContext) -> None:
         # Handle any unexpected errors
         error_msg = f"<b>❌ {to_small_caps('BROADCAST ERROR')}</b>\n<code>Error: {str(e)}</code>"
         
-        if 'status_msg' in locals():
+        if status_msg:
             await status_msg.edit_text(error_msg, parse_mode='HTML')
         else:
             await update.message.reply_text(error_msg, parse_mode='HTML')
@@ -385,6 +441,58 @@ async def broadcast(update: Update, context: CallbackContext) -> None:
         print(f"Broadcast error: {e}")
         
     finally:
+        # Database Cleanup Suggestions
+        if invalid_chats:
+            # Group invalid chats by type
+            invalid_groups = []
+            invalid_users = []
+            
+            for chat_id in invalid_chats:
+                if str(chat_id).startswith("-100"):
+                    # This is a group
+                    invalid_groups.append(chat_id)
+                else:
+                    # This is a user
+                    invalid_users.append(chat_id)
+            
+            cleanup_suggestions = []
+            
+            if invalid_groups:
+                # Suggest cleanup for groups
+                group_ids_str = ", ".join(map(str, invalid_groups[:10]))
+                if len(invalid_groups) > 10:
+                    group_ids_str += f" ... and {len(invalid_groups) - 10} more"
+                
+                cleanup_suggestions.append(
+                    f"<b>🗑️ {to_small_caps('INVALID GROUPS')} ({len(invalid_groups)})</b>\n"
+                    f"<code>IDs: {group_ids_str}</code>\n"
+                    f"<i>Remove with:</i>\n"
+                    f"<code>for group_id in {invalid_groups[:5]}:</code>\n"
+                    f"<code>    await top_global_groups_collection.delete_one({{'group_id': group_id}})</code>"
+                )
+            
+            if invalid_users:
+                # Suggest cleanup for users
+                user_ids_str = ", ".join(map(str, invalid_users[:10]))
+                if len(invalid_users) > 10:
+                    user_ids_str += f" ... and {len(invalid_users) - 10} more"
+                
+                cleanup_suggestions.append(
+                    f"<b>🗑️ {to_small_caps('INVALID USERS')} ({len(invalid_users)})</b>\n"
+                    f"<code>IDs: {user_ids_str}</code>\n"
+                    f"<i>Remove with:</i>\n"
+                    f"<code>for user_id in {invalid_users[:5]}:</code>\n"
+                    f"<code>    await pm_users.delete_one({{'_id': user_id}})</code>"
+                )
+            
+            if cleanup_suggestions:
+                cleanup_message = "\n\n".join(cleanup_suggestions)
+                await update.message.reply_text(
+                    f"<b>🧹 {to_small_caps('DATABASE CLEANUP SUGGESTIONS')}</b>\n"
+                    f"{cleanup_message}",
+                    parse_mode='HTML'
+                )
+        
         # Always reset the broadcast flag
         is_broadcasting = False
 
