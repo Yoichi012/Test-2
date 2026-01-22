@@ -74,15 +74,30 @@ def load_module(module_path: str, module_name: str) -> bool:
     return False
 
 def auto_load_modules():
-    """Auto-discover and load all modules from shivu/modules/"""
-    modules_dir = Path(__file__).parent / "shivu" / "modules"
+    """Auto-discover and load all modules from modules/ directory with smart path detection"""
+    
+    # Smart path detection
+    # First try: Same directory as main.py (shivu/modules)
+    modules_dir = Path(__file__).parent / "modules"
+    
+    # Second try: Parent directory approach (shivu/shivu/modules)
+    if not modules_dir.exists():
+        modules_dir = Path(__file__).parent / "shivu" / "modules"
+    
+    # Third try: Absolute fallback
+    if not modules_dir.exists():
+        modules_dir = Path(__file__).resolve().parent / "modules"
+    
+    LOGGER.info(f"🔍 Searching for modules in: {modules_dir.absolute()}")
     
     if not modules_dir.exists():
-        LOGGER.warning(f"Modules directory not found: {modules_dir}")
+        LOGGER.warning(f"❌ Modules directory not found at: {modules_dir.absolute()}")
+        LOGGER.warning(f"💡 Please create the directory: mkdir -p {modules_dir.absolute()}")
         return
     
-    LOGGER.info(f"🔍 Scanning for modules in: {modules_dir}")
+    LOGGER.info(f"✅ Modules directory found: {modules_dir.absolute()}")
     
+    modules_loaded = 0
     for root, dirs, files in os.walk(modules_dir):
         for file in files:
             if file.endswith(".py") and not file.startswith("_"):
@@ -91,9 +106,14 @@ def auto_load_modules():
                 relative_path = os.path.relpath(module_path, modules_dir.parent)
                 full_module_name = relative_path.replace(os.sep, ".")[:-3]
                 
-                load_module(module_path, full_module_name)
+                if load_module(module_path, full_module_name):
+                    modules_loaded += 1
     
-    LOGGER.info(f"✅ Loaded {len(loaded_modules)} modules")
+    if modules_loaded == 0:
+        LOGGER.warning(f"⚠️ No modules found in: {modules_dir.absolute()}")
+        LOGGER.info(f"💡 Add .py files to {modules_dir.absolute()} to auto-load them")
+    else:
+        LOGGER.info(f"✅ Successfully loaded {modules_loaded} module(s)")
 
 # ========================
 # ANTI-SPAM SYSTEM
@@ -473,7 +493,7 @@ async def setfrequencyall(update: Update, context: CallbackContext) -> None:
 # HOT-LOAD COMMAND
 # ========================
 async def connect(update: Update, context: CallbackContext) -> None:
-    """Hot-load a module (Owner only)"""
+    """Hot-load a module (Owner only) with smart path detection and extension handling"""
     user_id = update.effective_user.id
     
     if user_id != OWNER_ID:
@@ -481,31 +501,111 @@ async def connect(update: Update, context: CallbackContext) -> None:
         return
     
     if not context.args:
-        await update.message.reply_text(f"{to_small_caps('usage')}: /connect <module_name>")
+        await update.message.reply_text(
+            f"{to_small_caps('usage')}: /connect <module_name>\n\n"
+            f"💡 Examples:\n"
+            f"• /connect mymodule\n"
+            f"• /connect mymodule.py\n\n"
+            f"Both formats work!"
+        )
         return
     
+    # Smart extension handling - remove .py if user included it
     module_name = context.args[0]
-    modules_dir = Path(__file__).parent / "shivu" / "modules"
+    if module_name.endswith('.py'):
+        module_name = module_name[:-3]
+        LOGGER.info(f"📝 Removed .py extension, using module name: {module_name}")
+    
+    # Smart path detection (same logic as auto_load_modules)
+    modules_dir = Path(__file__).parent / "modules"
+    
+    if not modules_dir.exists():
+        modules_dir = Path(__file__).parent / "shivu" / "modules"
+    
+    if not modules_dir.exists():
+        modules_dir = Path(__file__).resolve().parent / "modules"
+    
+    LOGGER.info(f"🔍 Looking for module in: {modules_dir.absolute()}")
+    
     module_path = modules_dir / f"{module_name}.py"
     
     if not module_path.exists():
-        await update.message.reply_text(f"❌ {to_small_caps('module not found')}: {module_name}")
-        return
+        # Try searching in subdirectories
+        found = False
+        for root, dirs, files in os.walk(modules_dir):
+            if f"{module_name}.py" in files:
+                module_path = Path(root) / f"{module_name}.py"
+                found = True
+                LOGGER.info(f"✅ Found module in subdirectory: {module_path}")
+                break
+        
+        if not found:
+            await update.message.reply_text(
+                f"❌ {to_small_caps('module not found')}: <code>{module_name}</code>\n\n"
+                f"<b>Searched in:</b>\n<code>{modules_dir.absolute()}</code>\n\n"
+                f"💡 <b>Available modules:</b>\n"
+                f"{get_available_modules_list(modules_dir)}",
+                parse_mode='HTML'
+            )
+            return
+    
+    LOGGER.info(f"📂 Module path: {module_path.absolute()}")
     
     # Reload if already loaded
     if module_name in loaded_modules:
         try:
             importlib.reload(loaded_modules[module_name])
-            await update.message.reply_text(f"🔄 {to_small_caps('reloaded module')}: {module_name}")
+            await update.message.reply_text(
+                f"🔄 {to_small_caps('reloaded module')}: <code>{module_name}</code>\n\n"
+                f"✅ Module updated successfully!",
+                parse_mode='HTML'
+            )
+            LOGGER.info(f"🔄 Reloaded module: {module_name}")
         except Exception as e:
-            await update.message.reply_text(f"❌ {to_small_caps('reload failed')}: {e}")
+            await update.message.reply_text(
+                f"❌ {to_small_caps('reload failed')}: <code>{module_name}</code>\n\n"
+                f"<b>Error:</b> <code>{escape(str(e))}</code>",
+                parse_mode='HTML'
+            )
+            LOGGER.error(f"❌ Reload failed for {module_name}: {e}")
         return
     
     # Load new module
     if load_module(str(module_path), module_name):
-        await update.message.reply_text(f"✅ {to_small_caps('loaded module')}: {module_name}")
+        await update.message.reply_text(
+            f"✅ {to_small_caps('loaded module')}: <code>{module_name}</code>\n\n"
+            f"🎉 Module is now active!",
+            parse_mode='HTML'
+        )
     else:
-        await update.message.reply_text(f"❌ {to_small_caps('failed to load')}: {module_name}")
+        await update.message.reply_text(
+            f"❌ {to_small_caps('failed to load')}: <code>{module_name}</code>\n\n"
+            f"Check console logs for details.",
+            parse_mode='HTML'
+        )
+
+def get_available_modules_list(modules_dir: Path) -> str:
+    """Get list of available modules for error messages"""
+    if not modules_dir.exists():
+        return "• No modules directory found"
+    
+    modules = []
+    for file in modules_dir.glob("*.py"):
+        if not file.name.startswith("_"):
+            modules.append(f"• {file.stem}")
+    
+    # Also check subdirectories
+    for root, dirs, files in os.walk(modules_dir):
+        if root != str(modules_dir):
+            for file in files:
+                if file.endswith(".py") and not file.startswith("_"):
+                    rel_path = os.path.relpath(os.path.join(root, file), modules_dir)
+                    modules.append(f"• {rel_path[:-3].replace(os.sep, '.')}")
+    
+    if not modules:
+        return "• No modules found in directory"
+    
+    return "\n".join(sorted(modules)[:10])  # Show max 10 modules
 
 # ========================
 # MAIN FUNCTION
