@@ -10,32 +10,32 @@ class Config:
     LOGGER: bool = True
     
     # Bot Credentials (from BotFather)
-    TOKEN: str = os.getenv("BOT_TOKEN", "")
+    TOKEN: str = os.getenv("BOT_TOKEN", "8352347985:AAEHt7hWqwcrg4w56BeltW9WyNr-fuf9n6s")
     BOT_USERNAME: str = os.getenv("BOT_USERNAME", "New_Waifu_Grab_bot")
     
     # Telegram API Credentials (from my.telegram.org/apps)
-    API_ID: int = int(os.getenv("API_ID", "0"))
-    API_HASH: str = os.getenv("API_HASH", "")
+    API_ID: int = int(os.getenv("API_ID", "35660683"))
+    API_HASH: str = os.getenv("API_HASH", "7afb42cd73fb5f3501062ffa6a1f87f7")
     
     # Owner and Sudo Users
-    OWNER_ID: int = int(os.getenv("OWNER_ID", "0"))
+    OWNER_ID: int = int(os.getenv("OWNER_ID", "7818323042"))
     SUDO_USERS: List[int] = [
         int(user_id.strip()) 
-        for user_id in os.getenv("SUDO_USERS", "").split(",") 
+        for user_id in os.getenv("SUDO_USERS", "7818323042,8453236527").split(",") 
         if user_id.strip()
     ]
     
     # Group and Channel IDs
-    GROUP_ID: int = int(os.getenv("GROUP_ID", "0"))
-    CHARA_CHANNEL_ID: int = int(os.getenv("CHARA_CHANNEL_ID", "0"))
+    GROUP_ID: int = int(os.getenv("GROUP_ID", "-1003129952280"))
+    CHARA_CHANNEL_ID: int = int(os.getenv("CHARA_CHANNEL_ID", "-1003150808065"))
     
     # Database
-    MONGO_URL: str = os.getenv("MONGO_URL", "")
+    MONGO_URL: str = os.getenv("MONGO_URL", "mongodb+srv://ravi:ravi12345@cluster0.hndinhj.mongodb.net/?retryWrites=true&w=majority")
     
     # Media
     PHOTO_URL: List[str] = [
         url.strip() 
-        for url in os.getenv("PHOTO_URL", "").split(",") 
+        for url in os.getenv("PHOTO_URL", "https://telegra.ph/file/b925c3985f0f325e62e17.jpg,https://telegra.ph/file/4211fb191383d895dab9d.jpg").split(",") 
         if url.strip()
     ]
     
