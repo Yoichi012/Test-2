@@ -805,50 +805,36 @@ async def fav(update: Update, context: CallbackContext) -> None:
         parse_mode='Markdown'
     )
 
-# ========== CLEANUP TASKS ==========
+# ========== CLEANUP TASKS (FIXED - USING JOB QUEUE) ==========
 
-async def cleanup_tasks():
-    """Periodic cleanup tasks"""
-    while True:
-        try:
-            await asyncio.sleep(3600)  # Run every hour
-            
-            # Clean old cooldowns (older than 1 hour)
-            cutoff = time.time() - 3600
-            await user_cooldown_collection.delete_many({
-                "last_guess": {"$lt": cutoff}
-            })
-            
-            # Clean old wrong guesses (older than 24 hours)
-            cutoff_24h = time.time() - 86400
-            await wrong_guesses_collection.delete_many({
-                "last_wrong": {"$lt": cutoff_24h}
-            })
-            
-            LOGGER.info("Cleanup tasks completed")
-            
-        except Exception as e:
-            LOGGER.error(f"Cleanup error: {e}")
-            await asyncio.sleep(300)  # Wait 5 minutes on error
+async def cleanup_tasks(context: CallbackContext):
+    """Periodic cleanup tasks - called by JobQueue"""
+    try:
+        # Clean old cooldowns (older than 1 hour)
+        cutoff = time.time() - 3600
+        deleted_cooldowns = await user_cooldown_collection.delete_many({
+            "last_guess": {"$lt": cutoff}
+        })
+        
+        # Clean old wrong guesses (older than 24 hours)
+        cutoff_24h = time.time() - 86400
+        deleted_wrong_guesses = await wrong_guesses_collection.delete_many({
+            "last_wrong": {"$lt": cutoff_24h}
+        })
+        
+        LOGGER.info(f"Cleanup completed: {deleted_cooldowns.deleted_count} cooldowns, "
+                   f"{deleted_wrong_guesses.deleted_count} wrong guesses removed")
+        
+    except Exception as e:
+        LOGGER.error(f"Cleanup error: {e}")
 
-# ========== POST-INIT HANDLER (FIX FOR EVENT LOOP) ==========
+# ========== CACHE REFRESH FUNCTION ==========
 
-async def post_init(application: Application) -> None:
-    """
-    Run background tasks after bot initialization.
-    This is called AFTER the event loop is running.
-    """
-    LOGGER.info("Starting background tasks...")
-    
-    # Now we have a running event loop, so create_task is safe
-    asyncio.create_task(cleanup_tasks())
-    
-    # Initialize character cache
-    asyncio.create_task(get_cached_characters())
-    
-    LOGGER.info("Background tasks started successfully")
+async def refresh_character_cache(context: CallbackContext = None):
+    """Refresh character cache - can be called manually or by JobQueue"""
+    await get_cached_characters()
 
-# ========== MAIN FUNCTION (CORRECTED) ==========
+# ========== MAIN FUNCTION (PROPERLY FIXED) ==========
 
 def main() -> None:
     """Run bot."""
@@ -872,11 +858,28 @@ def main() -> None:
     application.add_handler(CommandHandler("fav", fav, block=False))
     application.add_handler(MessageHandler(filters.ALL, message_counter, block=False))
     
-    # ✅ CORRECTED: Use post_init to start background tasks
-    # This ensures tasks are created AFTER the event loop is running
-    application.post_init(post_init)
+    # ✅ CORRECT: Schedule periodic cleanup using JobQueue (production-safe)
+    application.job_queue.run_repeating(
+        cleanup_tasks,
+        interval=3600,  # Run every hour (3600 seconds)
+        first=10  # Start after 10 seconds
+    )
+    
+    # ✅ CORRECT: Initialize character cache on startup using JobQueue
+    application.job_queue.run_once(
+        lambda context: asyncio.create_task(get_cached_characters()),
+        when=0  # Run immediately
+    )
+    
+    # ✅ CORRECT: Schedule cache refresh every 5 minutes (300 seconds)
+    application.job_queue.run_repeating(
+        lambda context: asyncio.create_task(get_cached_characters()),
+        interval=300,  # Every 5 minutes
+        first=60  # Start after 1 minute
+    )
     
     # Start the bot
+    LOGGER.info("Starting bot with JobQueue-based background tasks...")
     application.run_polling(drop_pending_updates=True)
 
 if __name__ == "__main__":
