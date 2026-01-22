@@ -10,8 +10,8 @@ class Config:
     LOGGER: bool = True
     
     # Bot Credentials (from BotFather)
-    TOKEN: str = os.getenv("BOT_TOKEN", "8223905325:AAFsn8GpqmiIk_dLEuGnmxLmsQ4-9pPSMmw")
-    BOT_USERNAME: str = os.getenv("BOT_USERNAME", "New_Waifu_Grab_bot")
+    TOKEN: str = os.getenv("BOT_TOKEN", "8551975632:AAH1vrphQvEf_O5w9IfecwUmHJ_QwQbgBwM")
+    BOT_USERNAME: str = os.getenv("BOT_USERNAME", "Senpai_Waifu_Grabbing_Bot")
     
     # Telegram API Credentials (from my.telegram.org/apps)
     API_ID: int = int(os.getenv("API_ID", "35660683"))
