@@ -13,11 +13,11 @@ def small_caps(text: str) -> str:
 mapping = {
 'a': 'ᴀ', 'b': 'ʙ', 'c': 'ᴄ', 'd': 'ᴅ', 'e': 'ᴇ', 'f': 'ғ', 'g': 'ɢ',
 'h': 'ʜ', 'i': 'ɪ', 'j': 'ᴊ', 'k': 'ᴋ', 'l': 'ʟ', 'm': 'ᴍ', 'n': 'ɴ',
-'o': 'ᴏ', 'p': 'ᴘ', 'q': 'ǫ', 'r': 'ʀ', 's': 's', 't': 'ᴛ', 'u': 'ᴜ',
+'o': 'ᴏ', 'p': 'ᴘ', 'q': 'ǫ', 'r': 'ʀ', 's': 'ꜱ', 't': 'ᴛ', 'u': 'ᴜ',
 'v': 'ᴠ', 'w': 'ᴡ', 'x': 'x', 'y': 'ʏ', 'z': 'ᴢ',
 'A': 'ᴀ', 'B': 'ʙ', 'C': 'ᴄ', 'D': 'ᴅ', 'E': 'ᴇ', 'F': 'ғ', 'G': 'ɢ',
 'H': 'ʜ', 'I': 'ɪ', 'J': 'ᴊ', 'K': 'ᴋ', 'L': 'ʟ', 'M': 'ᴍ', 'N': 'ɴ',
-'O': 'ᴏ', 'P': 'ᴘ', 'Q': 'ǫ', 'R': 'ʀ', 'S': 'S', 'T': 'ᴛ', 'U': 'ᴜ',
+'O': 'ᴏ', 'P': 'ᴘ', 'Q': 'ǫ', 'R': 'ʀ', 'S': 'ꜱ', 'T': 'ᴛ', 'U': 'ᴜ',
 'V': 'ᴠ', 'W': 'ᴡ', 'X': 'X', 'Y': 'ʏ', 'Z': 'ᴢ',
 '0': '𝟶', '1': '𝟷', '2': '𝟸', '3': '𝟹', '4': '𝟺', '5': '𝟻', 
 '6': '𝟼', '7': '𝟽', '8': '𝟾', '9': '𝟿'
@@ -26,12 +26,12 @@ return ''.join(mapping.get(ch, ch) for ch in text)
 
 def get_keyboard() -> InlineKeyboardMarkup:
 keyboard = [
-[InlineKeyboardButton("✦ ᴀᴅᴅ ᴍᴇ ʙᴀʙʏ ✦", url=f'http://t.me/{BOT_USERNAME}?startgroup=new')],
+[InlineKeyboardButton(" ADD ME BABY ", url=f'http://t.me/{BOT_USERNAME}?startgroup=new')],
 [
-InlineKeyboardButton("✦ sᴜᴘᴘᴏʀᴛ", url=f'https://t.me/{SUPPORT_CHAT}'),
-InlineKeyboardButton("✦ ᴜᴘᴅᴀᴛᴇs", url=f'https://t.me/{UPDATE_CHAT}')
+InlineKeyboardButton(" SUPPORT", url=f'https://t.me/{SUPPORT_CHAT}'),
+InlineKeyboardButton(" UPDATES", url=f'https://t.me/{UPDATE_CHAT}')
 ],
-[InlineKeyboardButton("✦ ʜᴇʟᴘ", callback_data='help')]
+[InlineKeyboardButton(" HELP", callback_data='help')]
 ]
 return InlineKeyboardMarkup(keyboard)
 
@@ -41,41 +41,41 @@ user_id = user.id
 first_name = user.first_name
 username = user.username
 
-<b>✦ {small_caps('welcome to senpai waifu bot')} ✦</b>
+<b> {small_caps('welcome to senpai waifu bot')} </b>
 
-<i>ᴀɴ ᴇʟɪᴛᴇ ᴄʜᴀʀᴀᴄᴛᴇʀ ᴄᴀᴛᴄʜᴇʀ ʙᴏᴛ ᴅᴇsɪɢɴᴇᴅ ғᴏʀ ᴜʟᴛɪᴍᴀᴛᴇ ᴄᴏʟʟᴇᴄᴛᴏʀs</i>
+<i>an elite character catcher bot designed for ultimate collectors</i>
 """
 
-<b>✦ {small_caps('senpai waifu bot')} ɪs ᴀʟɪᴠᴇ</b>
+<b> {small_caps('senpai waifu bot')} is alive</b>
 
-<i>ᴄᴏɴɴᴇᴄᴛ ᴡɪᴛʜ ᴍᴇ ɪɴ ᴘʀɪᴠᴀᴛᴇ ғᴏʀ ᴇxᴄʟᴜsɪᴠᴇ ғᴇᴀᴛᴜʀᴇs</i>
+<i>connect with me in private for exclusive features</i>
 """
 
 async def button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 query = update.callback_query
 await query.answer()
 
-<b>✦ {small_caps('senpai waifu bot help guide')} ✦</b>
+<b> {small_caps('senpai waifu bot help guide')} </b>
 
-<b>✦ ɢᴀᴍᴇ ᴄᴏᴍᴍᴀɴᴅs</b>
-<code>/guess</code> - ᴄᴀᴛᴄʜ ᴀ sᴘᴀᴡɴᴇᴅ ᴄʜᴀʀᴀᴄᴛᴇʀ (ɢʀᴏᴜᴘ ᴏɴʟʏ)
-<code>/harem</code> - ᴠɪᴇᴡ ʏᴏᴜʀ ᴄᴏʟʟᴇᴄᴛɪᴏɴ
-<code>/fav</code> - ᴀᴅᴅ ᴄʜᴀʀᴀᴄᴛᴇʀs ᴛᴏ ғᴀᴠᴏʀɪᴛᴇs
-<code>/trade</code> - ᴛʀᴀᴅᴇ ᴄʜᴀʀᴀᴄᴛᴇʀs ᴡɪᴛʜ ᴏᴛʜᴇʀs
+<b> game commands</b>
+<code>/guess</code> - catch a spawned character (group only)
+<code>/harem</code> - view your collection
+<code>/fav</code> - add characters to favorites
+<code>/trade</code> - trade characters with others
 
-<b>✦ ᴜᴛɪʟɪᴛʏ ᴄᴏᴍᴍᴀɴᴅs</b>
-<code>/gift</code> - ɢɪғᴛ ᴄʜᴀʀᴀᴄᴛᴇʀs ᴛᴏ ᴜsᴇʀs (ɢʀᴏᴜᴘs)
-<code>/changetime</code> - ᴄʜᴀɴɢᴇ sᴘᴀᴡɴ ᴛɪᴍᴇ (ɢʀᴏᴜᴘ ᴀᴅᴍɪɴs)
+<b> utility commands</b>
+<code>/gift</code> - gift characters to users (groups)
+<code>/changetime</code> - change spawn time (group admins)
 
-<b>✦ sᴛᴀᴛɪsᴛɪᴄs ᴄᴏᴍᴍᴀɴᴅs</b>
-<code>/top</code> - ᴛᴏᴘ ᴜsᴇʀs ɢʟᴏʙᴀʟʟʏ
-<code>/ctop</code> - ᴛᴏᴘ ᴜsᴇʀs ɪɴ ᴛʜɪs ᴄʜᴀᴛ
-<code>/topgroups</code> - ᴛᴏᴘ ᴀᴄᴛɪᴠᴇ ɢʀᴏᴜᴘs
+<b> statistics commands</b>
+<code>/top</code> - top users globally
+<code>/ctop</code> - top users in this chat
+<code>/topgroups</code> - top active groups
 """
 
-<b>✦ {small_caps('welcome to senpai waifu bot')} ✦</b>
+<b> {small_caps('welcome to senpai waifu bot')} </b>
 
-<i>ᴀɴ ᴇʟɪᴛᴇ ᴄʜᴀʀᴀᴄᴛᴇʀ ᴄᴀᴛᴄʜᴇʀ ʙᴏᴛ ᴅᴇsɪɢɴᴇᴅ ғᴏʀ ᴜʟᴛɪᴍᴀᴛᴇ ᴄᴏʟʟᴇᴄᴛᴏʀs</i>
+<i>an elite character catcher bot designed for ultimate collectors</i>
 """
 
 application.add_handler(CallbackQueryHandler(button, pattern='^help$|^back$'))
