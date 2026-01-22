@@ -7,7 +7,7 @@ from telegram.ext import CommandHandler, ContextTypes
 from telegram.error import BadRequest
 from telegram.ext import Application
 
-from config import Config
+from shivu.config import Config
 from shivu import application, collection, db, CHARA_CHANNEL_ID, SUPPORT_CHAT
 
 # Global aiohttp session for reuse
