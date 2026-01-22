@@ -20,15 +20,11 @@ from shivu import (
     shivuu, 
     application, 
     db, 
-    LOGGER
+    LOGGER,
+    OWNER_ID,
+    SUDO_USERS,
+    MONGO_URL
 )
-
-# Import configuration
-try:
-    from shivu.config import OWNER_ID, SUDO_USERS, MONGO_URL
-except ImportError:
-    LOGGER.error("Failed to import config. Please ensure shivu/config.py exists with OWNER_ID, SUDO_USERS, and MONGO_URL")
-    sys.exit(1)
 
 # ========================
 # GLOBAL STATE
@@ -99,7 +95,7 @@ def auto_load_modules():
 # ========================
 # ANTI-SPAM SYSTEM
 # ========================
-async def check_spam(chat_id: str, user_id: int) -> bool:
+async def check_spam(chat_id: int, user_id: int) -> bool:
     """Returns True if user should be ignored (is spamming)"""
     current_time = time.time()
     
@@ -136,7 +132,7 @@ async def message_counter(update: Update, context: CallbackContext) -> None:
     if not update.effective_chat or not update.effective_user:
         return
     
-    chat_id = str(update.effective_chat.id)
+    chat_id = update.effective_chat.id  # Keep as INTEGER
     user_id = update.effective_user.id
     
     # Initialize lock
@@ -146,6 +142,7 @@ async def message_counter(update: Update, context: CallbackContext) -> None:
     async with locks[chat_id]:
         # Anti-spam check
         if await check_spam(chat_id, user_id):
+            # Only show warning once when first triggered
             if user_id not in warned_users or time.time() - warned_users[user_id] > 590:
                 await update.message.reply_text(
                     f"⚠️ {to_small_caps('dont spam')} {escape(update.effective_user.first_name)}...\n"
@@ -170,7 +167,7 @@ async def message_counter(update: Update, context: CallbackContext) -> None:
 # ========================
 async def send_image(update: Update, context: CallbackContext) -> None:
     """Spawn a new character"""
-    chat_id = update.effective_chat.id
+    chat_id = update.effective_chat.id  # Keep as INTEGER
     
     all_characters = list(await collection.find({}).to_list(length=None))
     
@@ -207,7 +204,7 @@ async def send_image(update: Update, context: CallbackContext) -> None:
 # ========================
 async def guess(update: Update, context: CallbackContext) -> None:
     """Handle character guessing"""
-    chat_id = update.effective_chat.id
+    chat_id = update.effective_chat.id  # Keep as INTEGER
     user_id = update.effective_user.id
     
     if chat_id not in last_characters:
@@ -238,8 +235,8 @@ async def guess(update: Update, context: CallbackContext) -> None:
         # Step 2: React with emoji
         try:
             await congrats_msg.set_reaction("🎉")
-        except:
-            pass
+        except Exception as e:
+            LOGGER.debug(f"Reaction failed: {e}")
         
         # Update user in database
         user = await user_collection.find_one({'id': user_id})
@@ -268,7 +265,7 @@ async def guess(update: Update, context: CallbackContext) -> None:
                 'coins': 100
             })
         
-        # Update group stats
+        # Update group stats (chat_id as INTEGER)
         group_user_total = await group_user_totals_collection.find_one({'user_id': user_id, 'group_id': chat_id})
         if group_user_total:
             await group_user_totals_collection.update_one(
@@ -284,7 +281,7 @@ async def guess(update: Update, context: CallbackContext) -> None:
                 'count': 1
             })
         
-        # Update global group stats
+        # Update global group stats (chat_id as INTEGER)
         await top_global_groups_collection.update_one(
             {'group_id': chat_id},
             {
@@ -340,13 +337,17 @@ async def fav(update: Update, context: CallbackContext) -> None:
 # ========================
 async def setfrequency(update: Update, context: CallbackContext) -> None:
     """Set spawn frequency for current chat (Admin only)"""
-    chat_id = str(update.effective_chat.id)
+    chat_id = update.effective_chat.id  # Keep as INTEGER
     user_id = update.effective_user.id
     
     # Check if user is admin
-    chat_member = await context.bot.get_chat_member(chat_id, user_id)
-    if chat_member.status not in ['creator', 'administrator']:
-        await update.message.reply_text(f"❌ {to_small_caps('only admins can use this command')}")
+    try:
+        chat_member = await context.bot.get_chat_member(chat_id, user_id)
+        if chat_member.status not in ['creator', 'administrator']:
+            await update.message.reply_text(f"❌ {to_small_caps('only admins can use this command')}")
+            return
+    except Exception as e:
+        LOGGER.error(f"Failed to check admin status: {e}")
         return
     
     if not context.args or not context.args[0].isdigit():
@@ -455,13 +456,21 @@ def main() -> None:
     application.add_handler(MessageHandler(filters.ALL, message_counter, block=False))
     
     LOGGER.info("✅ All handlers registered")
-    LOGGER.info(f"📊 Database: Connected to {MONGO_URL[:20]}...")
+    LOGGER.info(f"📊 Database: Connected to MongoDB")
     LOGGER.info(f"👑 Owner ID: {OWNER_ID}")
     
     # Run bot
     application.run_polling(drop_pending_updates=True)
 
 if __name__ == "__main__":
-    shivuu.start()
-    LOGGER.info("✅ Bot client started")
+    # Gracefully start Pyrogram client
+    try:
+        if shivuu:
+            shivuu.start()
+            LOGGER.info("✅ Pyrogram client started successfully")
+    except Exception as e:
+        LOGGER.warning(f"⚠️ Pyrogram client failed to start: {e}")
+        LOGGER.info("Continuing without Pyrogram client...")
+    
+    LOGGER.info("✅ Bot initialization complete")
     main()
