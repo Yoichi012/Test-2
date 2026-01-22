@@ -13,11 +13,12 @@ logging.basicConfig(
 logging.getLogger("apscheduler").setLevel(logging.ERROR)
 logging.getLogger('httpx').setLevel(logging.WARNING)
 logging.getLogger("pyrate_limiter").setLevel(logging.ERROR)
+
 LOGGER = logging.getLogger(__name__)
 
 from shivu.config import Development as Config
 
-
+# Configuration Variables
 API_ID = Config.API_ID
 API_HASH = Config.API_HASH
 TOKEN = Config.TOKEN
@@ -31,9 +32,14 @@ SUPPORT_CHAT = Config.SUPPORT_CHAT
 UPDATE_CHAT = Config.UPDATE_CHAT
 BOT_USERNAME = Config.BOT_USERNAME 
 
+# Initialize Telegram Application
 application = Application.builder().token(TOKEN).build()
-shivuu = Client("Shivu", api_id, api_hash, bot_token=TOKEN)
-lol = AsyncIOMotorClient(mongo_url)
+
+# Initialize Pyrogram Client
+shivuu = Client("Shivu", API_ID, API_HASH, bot_token=TOKEN)
+
+# Initialize MongoDB
+lol = AsyncIOMotorClient(MONGO_URL)
 db = lol['Character_catcher']
 collection = db['anime_characters_lol']
 user_totals_collection = db['user_totals_lmaoooo']
