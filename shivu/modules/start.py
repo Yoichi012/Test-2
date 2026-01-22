@@ -25,59 +25,101 @@ def small_caps(text: str) -> str:
     return ''.join(mapping.get(ch, ch) for ch in text)
 
 def get_keyboard() -> InlineKeyboardMarkup:
-keyboard = [
-[InlineKeyboardButton(" ADD ME BABY ", url=f'http://t.me/{BOT_USERNAME}?startgroup=new')],
-[
-InlineKeyboardButton(" SUPPORT", url=f'https://t.me/{SUPPORT_CHAT}'),
-InlineKeyboardButton(" UPDATES", url=f'https://t.me/{UPDATE_CHAT}')
-],
-[InlineKeyboardButton(" HELP", callback_data='help')]
-]
-return InlineKeyboardMarkup(keyboard)
+    keyboard = [
+        [InlineKeyboardButton("ᴀᴅᴅ ᴍᴇ ʙᴀʙʏ", url=f'http://t.me/{BOT_USERNAME}?startgroup=new')],
+        [
+            InlineKeyboardButton("ꜱᴜᴘᴘᴏʀᴛ", url=f'https://t.me/{SUPPORT_CHAT}'),
+            InlineKeyboardButton("ᴜᴘᴅᴀᴛᴇꜱ", url=f'https://t.me/{UPDATE_CHAT}')
+        ],
+        [InlineKeyboardButton("ʜᴇʟᴘ", callback_data='help')]
+    ]
+    return InlineKeyboardMarkup(keyboard)
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-user = update.effective_user
-user_id = user.id
-first_name = user.first_name
-username = user.username
+    user = update.effective_user
+    user_id = user.id
+    first_name = user.first_name
+    username = user.username
 
-<b> {small_caps('welcome to senpai waifu bot')} </b>
+    pm_text = f"""
+<b>{small_caps('welcome to senpai waifu bot')}</b>
 
 <i>an elite character catcher bot designed for ultimate collectors</i>
 """
 
-<b> {small_caps('senpai waifu bot')} is alive</b>
+    start_text = f"""
+<b>{small_caps('senpai waifu bot')} is alive</b>
 
 <i>connect with me in private for exclusive features</i>
 """
 
+    # Check if it's a private chat or group
+    if update.effective_chat.type == "private":
+        # Store user in database
+        await collection.update_one(
+            {'id': user_id},
+            {"$set": {'id': user_id, 'first_name': first_name, 'username': username}},
+            upsert=True
+        )
+        
+        # Send photo with welcome message
+        await update.message.reply_photo(
+            photo=PHOTO_URL,
+            caption=pm_text,
+            parse_mode='HTML',
+            reply_markup=get_keyboard()
+        )
+    else:
+        # Group chat response
+        await update.message.reply_text(
+            text=start_text,
+            parse_mode='HTML',
+            reply_markup=get_keyboard()
+        )
+
 async def button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-query = update.callback_query
-await query.answer()
+    query = update.callback_query
+    await query.answer()
 
-<b> {small_caps('senpai waifu bot help guide')} </b>
+    help_text = f"""
+<b>{small_caps('senpai waifu bot help guide')}</b>
 
-<b> game commands</b>
+<b>game commands</b>
 <code>/guess</code> - catch a spawned character (group only)
 <code>/harem</code> - view your collection
 <code>/fav</code> - add characters to favorites
 <code>/trade</code> - trade characters with others
 
-<b> utility commands</b>
+<b>utility commands</b>
 <code>/gift</code> - gift characters to users (groups)
 <code>/changetime</code> - change spawn time (group admins)
 
-<b> statistics commands</b>
+<b>statistics commands</b>
 <code>/top</code> - top users globally
 <code>/ctop</code> - top users in this chat
 <code>/topgroups</code> - top active groups
 """
 
-<b> {small_caps('welcome to senpai waifu bot')} </b>
+    welcome_text = f"""
+<b>{small_caps('welcome to senpai waifu bot')}</b>
 
 <i>an elite character catcher bot designed for ultimate collectors</i>
 """
 
+    if query.data == 'help':
+        await query.edit_message_caption(
+            caption=help_text,
+            parse_mode='HTML',
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("ʙᴀᴄᴋ", callback_data='back')]])
+        )
+    elif query.data == 'back':
+        await query.edit_message_caption(
+            caption=welcome_text,
+            parse_mode='HTML',
+            reply_markup=get_keyboard()
+        )
+
+# Add handlers
 application.add_handler(CallbackQueryHandler(button, pattern='^help$|^back$'))
 start_handler = CommandHandler('start', start)
 application.add_handler(start_handler)
