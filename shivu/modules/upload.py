@@ -1,13 +1,16 @@
 import asyncio
 from typing import Dict, Any, Optional, List
-
 import aiohttp
 from pymongo import ReturnDocument
 from telegram import Update, PhotoSize
-from telegram.ext import CommandHandler, CallbackContext
+from telegram.ext import CommandHandler, ContextTypes
 from telegram.error import BadRequest
+from telegram.ext import Application
 
-from shivu import application, sudo_users, collection, db, CHARA_CHANNEL_ID, SUPPORT_CHAT
+from shivu import sudo_users, collection, db, CHARA_CHANNEL_ID, SUPPORT_CHAT
+
+# Global aiohttp session for reuse
+SESSION: Optional[aiohttp.ClientSession] = None
 
 # Constants
 WRONG_FORMAT_TEXT = """❌ Wrong format!
@@ -37,23 +40,34 @@ RARITY_MAP = {
 
 VALID_FIELDS = ['img_url', 'name', 'anime', 'rarity']
 
+async def get_session() -> aiohttp.ClientSession:
+    """Get or create global aiohttp session."""
+    global SESSION
+    if SESSION is None or SESSION.closed:
+        timeout = aiohttp.ClientTimeout(total=10)
+        SESSION = aiohttp.ClientSession(timeout=timeout)
+    return SESSION
+
 async def validate_image_url(url: str) -> bool:
     """Validate if URL is accessible and points to an image."""
     # Check if it's a Telegram file_id (starts with 'Ag')
     if url.startswith('Ag'):
         return True
     
+    session = await get_session()
     try:
-        async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=10)) as session:
-            async with session.head(url) as response:
-                if response.status != 200:
-                    return False
-                
-                # Check if content type is image
-                content_type = response.headers.get('Content-Type', '').lower()
-                return content_type.startswith('image/')
+        async with session.head(url) as response:
+            if response.status != 200:
+                return False
+            
+            # Check if content type is image
+            content_type = response.headers.get('Content-Type', '').lower()
+            return content_type.startswith('image/')
     except (aiohttp.ClientError, asyncio.TimeoutError):
         return False
+    finally:
+        # Don't close session, keep it open for reuse
+        pass
 
 async def get_next_sequence_number(sequence_name: str) -> int:
     """Get next sequence number for character IDs."""
@@ -72,7 +86,7 @@ def get_best_photo_file_id(photo_sizes: List[PhotoSize]) -> str:
     return photo_sizes[-1].file_id
 
 async def send_channel_message(
-    context: CallbackContext, 
+    context: ContextTypes.DEFAULT_TYPE, 
     character: Dict[str, Any], 
     user_id: int, 
     user_name: str,
@@ -88,8 +102,10 @@ async def send_channel_message(
             f"{action} by <a href='tg://user?id={user_id}'>{user_name}</a>"
         )
         
+        bot = context.application.bot
+        
         if action == "Added" or 'message_id' not in character:
-            message = await context.bot.send_photo(
+            message = await bot.send_photo(
                 chat_id=CHARA_CHANNEL_ID,
                 photo=character['img_url'],
                 caption=caption,
@@ -97,7 +113,7 @@ async def send_channel_message(
             )
             return message.message_id
         else:
-            await context.bot.edit_message_caption(
+            await bot.edit_message_caption(
                 chat_id=CHARA_CHANNEL_ID,
                 message_id=character['message_id'],
                 caption=caption,
@@ -108,7 +124,8 @@ async def send_channel_message(
         error_msg = str(e).lower()
         if "not found" in error_msg or "message to edit not found" in error_msg:
             # Message was deleted from channel, send new one
-            message = await context.bot.send_photo(
+            bot = context.application.bot
+            message = await bot.send_photo(
                 chat_id=CHARA_CHANNEL_ID,
                 photo=character['img_url'],
                 caption=caption,
@@ -117,7 +134,7 @@ async def send_channel_message(
             return message.message_id
         raise
 
-async def upload(update: Update, context: CallbackContext) -> None:
+async def upload(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Handle character upload command with both reply-to-photo and URL methods."""
     # Fix: Convert user ID to string for comparison
     if str(update.effective_user.id) not in sudo_users:
@@ -210,7 +227,7 @@ async def upload(update: Update, context: CallbackContext) -> None:
                 f'If you think this is a source error, forward to: {SUPPORT_CHAT}'
             )
 
-async def delete(update: Update, context: CallbackContext) -> None:
+async def delete(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Handle character deletion command."""
     # Fix: Convert user ID to string for comparison
     if str(update.effective_user.id) not in sudo_users:
@@ -233,7 +250,8 @@ async def delete(update: Update, context: CallbackContext) -> None:
     # Try to delete from channel
     try:
         if 'message_id' in character:
-            await context.bot.delete_message(
+            bot = context.application.bot
+            await bot.delete_message(
                 chat_id=CHARA_CHANNEL_ID,
                 message_id=character['message_id']
             )
@@ -255,7 +273,7 @@ async def delete(update: Update, context: CallbackContext) -> None:
             f'⚠️ Channel deletion error: {str(e)}'
         )
 
-async def update(update: Update, context: CallbackContext) -> None:
+async def update(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Handle character update command."""
     # Fix: Convert user ID to string for comparison
     if str(update.effective_user.id) not in sudo_users:
@@ -318,11 +336,13 @@ async def update(update: Update, context: CallbackContext) -> None:
 
     # Update channel message
     try:
+        bot = context.application.bot
+        
         if field == 'img_url':
             # For image URL changes, we need to send a new message
             if 'message_id' in updated_character:
                 try:
-                    await context.bot.delete_message(
+                    await bot.delete_message(
                         chat_id=CHARA_CHANNEL_ID,
                         message_id=updated_character['message_id']
                     )
@@ -377,7 +397,14 @@ async def update(update: Update, context: CallbackContext) -> None:
             f'✅ Database updated but channel update failed: {str(e)}'
         )
 
-# Register handlers
-application.add_handler(CommandHandler("upload", upload, block=False))
-application.add_handler(CommandHandler("delete", delete, block=False))
-application.add_handler(CommandHandler("update", update, block=False))
+def setup_handlers(application: Application) -> None:
+    """Register command handlers."""
+    application.add_handler(CommandHandler("upload", upload))
+    application.add_handler(CommandHandler("delete", delete))
+    application.add_handler(CommandHandler("update", update))
+
+async def cleanup_session() -> None:
+    """Cleanup global session on shutdown."""
+    global SESSION
+    if SESSION and not SESSION.closed:
+        await SESSION.close()
