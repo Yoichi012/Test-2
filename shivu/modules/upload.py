@@ -7,7 +7,8 @@ from telegram.ext import CommandHandler, ContextTypes
 from telegram.error import BadRequest
 from telegram.ext import Application
 
-from shivu import application, sudo_users, collection, db, CHARA_CHANNEL_ID, SUPPORT_CHAT
+from config import Config
+from shivu import application, collection, db, CHARA_CHANNEL_ID, SUPPORT_CHAT
 
 # Global aiohttp session for reuse
 SESSION: Optional[aiohttp.ClientSession] = None
@@ -136,7 +137,7 @@ async def send_channel_message(
 
 async def upload(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Handle character upload command with both reply-to-photo and URL methods."""
-    if str(update.effective_user.id) not in sudo_users:
+    if update.effective_user.id not in Config.SUDO_USERS:
         await update.message.reply_text('Ask My Owner...')
         return
 
@@ -219,7 +220,7 @@ async def upload(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
 async def delete(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Handle character deletion command."""
-    if str(update.effective_user.id) not in sudo_users:
+    if update.effective_user.id not in Config.SUDO_USERS:
         await update.message.reply_text('Ask my Owner to use this Command...')
         return
 
@@ -261,7 +262,7 @@ async def delete(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
 async def update(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Handle character update command."""
-    if str(update.effective_user.id) not in sudo_users:
+    if update.effective_user.id not in Config.SUDO_USERS:
         await update.message.reply_text('You do not have permission to use this command.')
         return
 
