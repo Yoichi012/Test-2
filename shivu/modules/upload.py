@@ -71,6 +71,29 @@ def format_character_id(sequence_number: int) -> str:
     """Format character ID as sequential human-readable number."""
     return str(sequence_number)
 
+def format_update_help(fields: list) -> str:
+    """Format update command help message."""
+    help_text = "📝 **Update Command Usage:**\n\n"
+    
+    help_text += "1️⃣ **Update with value:**\n"
+    help_text += "   `/update id field new_value`\n\n"
+    
+    help_text += "2️⃣ **Update image (reply to photo):**\n"
+    help_text += "   `/update id img_url`\n"
+    help_text += "   (Reply to a photo with this command)\n\n"
+    
+    help_text += f"**Valid fields:** {', '.join(fields)}\n\n"
+    
+    help_text += "✨ **Examples:**\n"
+    help_text += "• `/update 12 name Nezuko Kamado`\n"
+    help_text += "• `/update 12 anime Demon Slayer`\n"
+    help_text += "• `/update 12 rarity 5`\n"
+    help_text += "• `/update 12 img_url` (reply to photo)\n"
+    help_text += "• `/update 12 img_url AgABCD1234` (file_id)\n"
+    help_text += "• `/update 12 img_url https://example.com/image.jpg`"
+    
+    return help_text
+
 async def get_session() -> aiohttp.ClientSession:
     """Get or create global aiohttp session."""
     global SESSION
@@ -326,14 +349,15 @@ async def update(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         await update.message.reply_text('You do not have permission to use this command.')
         return
 
-    if not context.args or len(context.args) != 3:
+    if not context.args or len(context.args) < 2:
         await update.message.reply_text(
-            '❌ Incorrect format. Please use: /update id field new_value\n'
-            f'Valid fields: {", ".join(VALID_FIELDS)}'
+            format_update_help(VALID_FIELDS),
+            parse_mode='Markdown'
         )
         return
 
-    char_id, field, new_value = context.args
+    char_id = context.args[0]
+    field = context.args[1]
 
     if field not in VALID_FIELDS:
         await update.message.reply_text(
@@ -346,10 +370,70 @@ async def update(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         await update.message.reply_text('❌ Character not found.')
         return
 
-    update_data = {}
-    if field in ['name', 'anime']:
-        update_data[field] = new_value.replace('-', ' ').title()
+    # Handle img_url field with optional value
+    if field == 'img_url':
+        # Check if user wants to use replied photo
+        if len(context.args) == 2:
+            # User used: /update id img_url (without value)
+            if not (update.message.reply_to_message and update.message.reply_to_message.photo):
+                await update.message.reply_text(
+                    '📸 **Reply to a Photo Required!**\n\n'
+                    'To update image by replying:\n'
+                    '1. Reply to a photo\n'
+                    '2. Use: `/update id img_url`\n\n'
+                    '**OR** provide a valid image link:\n'
+                    '`/update id img_url https://example.com/image.jpg`'
+                )
+                return
+            
+            # Extract file_id from replied photo
+            photo_sizes = update.message.reply_to_message.photo
+            new_value = get_best_photo_file_id(photo_sizes)
+            update_data = {'img_url': new_value}
+            
+        else:
+            # User used: /update id img_url <value>
+            new_value = context.args[2]
+            
+            # Validate the value
+            if not new_value.startswith('Ag'):
+                # For external URLs, perform validation
+                is_valid_url = await validate_image_url(new_value)
+                if not is_valid_url:
+                    await update.message.reply_text(
+                        '❌ **Invalid Image URL!**\n\n'
+                        'The URL must:\n'
+                        '• Be publicly accessible\n'
+                        '• Point directly to an image file\n'
+                        '• Return HTTP status 200\n\n'
+                        f'**Tip:** You can also:\n'
+                        f'1. Reply to a photo and use `/update {char_id} img_url`\n'
+                        f'2. Use a Telegram file_id (starts with "Ag")'
+                    )
+                    return
+            
+            update_data = {'img_url': new_value}
+        
+    elif field in ['name', 'anime']:
+        if len(context.args) != 3:
+            await update.message.reply_text(
+                f'❌ Missing value for {field}.\n'
+                f'Usage: /update {char_id} {field} new_value'
+            )
+            return
+        
+        new_value = context.args[2]
+        update_data = {field: new_value.replace('-', ' ').title()}
+        
     elif field == 'rarity':
+        if len(context.args) != 3:
+            await update.message.reply_text(
+                f'❌ Missing rarity value.\n'
+                f'Usage: /update {char_id} rarity 1-15'
+            )
+            return
+        
+        new_value = context.args[2]
         try:
             rarity_num = int(new_value)
             if rarity_num not in RARITY_MAP:
@@ -357,26 +441,14 @@ async def update(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
                     f'❌ Invalid rarity. Please use a number between 1 and {max(RARITY_MAP.keys())}.'
                 )
                 return
-            update_data[field] = RARITY_MAP[rarity_num]
+            update_data = {'rarity': RARITY_MAP[rarity_num]}
         except ValueError:
             await update.message.reply_text(f'❌ Rarity must be a number (1-{max(RARITY_MAP.keys())}).')
             return
-    else:  # img_url field
-        if not new_value.startswith('Ag'):
-            # For external URLs, perform validation
-            is_valid_url = await validate_image_url(new_value)
-            if not is_valid_url:
-                await update.message.reply_text(
-                    '❌ **Invalid Image URL!**\n\n'
-                    'The URL must:\n'
-                    '• Be publicly accessible\n'
-                    '• Point directly to an image file\n'
-                    '• Return HTTP status 200\n'
-                    '• Have proper image Content-Type\n\n'
-                    f'**Tip:** You can also use a Telegram file_id (starts with "Ag")'
-                )
-                return
-        update_data[field] = new_value
+    else:
+        # This should not happen since we validated fields earlier
+        await update.message.reply_text(f'❌ Unknown field: {field}')
+        return
 
     updated_character = await collection.find_one_and_update(
         {'id': char_id},
