@@ -1,57 +1,84 @@
 from pymongo import ReturnDocument
 from pyrogram import Client, filters
-from pyrogram.enums import ChatMemberStatus, ChatType
+from pyrogram.enums import ChatMemberStatus
 from pyrogram.types import Message
 
-from shivu import user_totals_collection, shivuu
-
-# Allowed admin roles
-ADMINS = [ChatMemberStatus.ADMINISTRATOR, ChatMemberStatus.OWNER]
+from shivu import user_totals_collection, shivuu, OWNER_ID
 
 
-@shivuu.on_message(filters.command("ctime") & filters.group)
-async def change_group_time(client: Client, message: Message):
+# =========================
+# 1️⃣ /changetime
+# =========================
+@shivuu.on_message(filters.command("changetime"))
+async def change_time_all_groups(client: Client, message: Message):
 
-    # Safety: message must have a sender
-    if not message.from_user:
+    # Only BOT OWNER
+    if message.from_user.id != OWNER_ID:
+        await message.reply_text("❌ Only Bot Owner can use this command.")
         return
 
-    user_id = message.from_user.id
-    chat_id = message.chat.id
-
-    # Admin check
-    try:
-        member = await shivuu.get_chat_member(chat_id, user_id)
-    except Exception:
-        await message.reply_text("❌ Unable to verify admin status.")
-        return
-
-    if member.status not in ADMINS:
-        await message.reply_text("❌ You are not an Admin.")
-        return
-
-    # Command args
     args = message.command
     if len(args) != 2:
         await message.reply_text(
-            "⚠️ **Usage:**\n`/ctime <frequency>`"
+            "⚠️ Usage:\n`/changetime <frequency>`"
         )
         return
 
-    # Validate frequency
     try:
         new_frequency = int(args[1])
     except ValueError:
         await message.reply_text("❌ Frequency must be a number.")
         return
 
-    if new_frequency < 100:
+    # Minimum limit = 50
+    if new_frequency < 50:
         await message.reply_text(
-            "⚠️ Frequency must be **greater than or equal to 100**."
+            "⚠️ Frequency must be **>= 50** for global change."
         )
         return
 
-    # Update DB
+    try:
+        result = await user_totals_collection.update_many(
+            {},
+            {"$set": {"message_frequency": new_frequency}}
+        )
+
+        await message.reply_text(
+            f"✅ **Global Frequency Updated**\n\n"
+            f"⏱ New Frequency: `{new_frequency}`\n"
+            f"📊 Groups Updated: `{result.modified_count}`"
+        )
+
+    except Exception as e:
+        await message.reply_text(f"❌ Failed:\n`{e}`")
+
+
+# =========================
+# 2️⃣ /ctime
+# =========================
+@shivuu.on_message(filters.command("ctime") & filters.group)
+async def change_time_single_group(client: Client, message: Message):
+
+    # Only BOT OWNER
+    if message.from_user.id != OWNER_ID:
+        await message.reply_text("❌ Only Bot Owner can use this command.")
+        return
+
+    args = message.command
+    if len(args) != 2:
+        await message.reply_text(
+            "⚠️ Usage:\n`/ctime <frequency>`"
+        )
+        return
+
+    try:
+        new_frequency = int(args[1])
+    except ValueError:
+        await message.reply_text("❌ Frequency must be a number.")
+        return
+
+    chat_id = message.chat.id
+
     try:
         await user_totals_collection.find_one_and_update(
             {"chat_id": str(chat_id)},
@@ -61,10 +88,10 @@ async def change_group_time(client: Client, message: Message):
         )
 
         await message.reply_text(
-            f"✅ **Frequency Updated Successfully**\n\n"
-            f"👥 **Group:** `{message.chat.title}`\n"
-            f"⏱ **New Frequency:** `{new_frequency}`"
+            f"✅ **Group Frequency Updated**\n\n"
+            f"👥 Group: `{message.chat.title}`\n"
+            f"⏱ New Frequency: `{new_frequency}`"
         )
 
     except Exception as e:
-        await message.reply_text(f"❌ Failed to update:\n`{e}`")
+        await message.reply_text(f"❌ Failed:\n`{e}`")
