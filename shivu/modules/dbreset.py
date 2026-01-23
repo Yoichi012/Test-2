@@ -6,40 +6,33 @@ from shivu import shivuu
 from shivu.config import Config
 
 
-# =========================
-# HARD SECURITY
-# =========================
 OWNER_ID = 7818323042
-DB_NAME = "shivu_db"   # apna exact database name yahan rakho
+DB_NAME = "shivu_db"
 
-
-# =========================
-# MongoDB client
-# =========================
 mongo_client = AsyncIOMotorClient(Config.MONGO_URL)
+db = mongo_client.get_database(DB_NAME)
 
 
-# =========================
-# /dbreset (FULL RESET)
-# =========================
 @shivuu.on_message(filters.command("dbreset"))
 async def dbreset(client: Client, message: Message):
 
     if not message.from_user:
         return
 
-    # 🤫 silent ignore for non-owner
+    # silent ignore for non-owner
     if message.from_user.id != OWNER_ID:
         return
 
     try:
-        # 💣 DROP COMPLETE DATABASE
-        await mongo_client.drop_database(DB_NAME)
+        collections = await db.list_collection_names()
+
+        for name in collections:
+            await db[name].drop()
 
         await message.reply_text(
             "DATABASE RESET COMPLETE\n\n"
-            f"Dropped database: {DB_NAME}\n"
-            "MongoDB will start fresh on next use.",
+            "All collections dropped successfully.\n"
+            "Database is now clean and ready.",
             parse_mode=None
         )
 
