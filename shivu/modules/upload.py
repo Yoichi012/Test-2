@@ -176,25 +176,6 @@ async def send_channel_message(
             return message.message_id
         raise
 
-async def background_convert_file_id(character_id: str, file_id: str) -> None:
-    """Background task to convert Telegram file_id to public URL for inline queries."""
-    try:
-        # Import the converter module
-        from shivu.module.image_converter import convert_file_id_to_url
-        
-        # Convert file_id to public URL
-        public_url = await convert_file_id_to_url(character_id, file_id)
-        
-        # Update the database with the public URL
-        if public_url:
-            await collection.update_one(
-                {'id': character_id},
-                {'$set': {'img_url': public_url}}
-            )
-    except Exception as e:
-        # Silent error handling - log but don't crash
-        print(f"Background conversion failed for character {character_id}: {e}")
-
 async def upload(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if update.effective_user.id not in Config.SUDO_USERS:
         await update.message.reply_text('🔒 ᴀꜱᴋ ᴍʏ ᴏᴡɴᴇʀ...')
@@ -222,7 +203,6 @@ async def upload(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
         photo_sizes = update.message.reply_to_message.photo
         img_file_id = get_best_photo_file_id(photo_sizes)
-        img_url = img_file_id
 
         try:
             rarity_num = int(rarity_raw.strip())
@@ -238,12 +218,15 @@ async def upload(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             )
             return
 
+        character_id = format_character_id(await get_next_sequence_number('character_id'))
+        
         character = {
-            'img_url': img_url,
+            'img_file_id': img_file_id,
+            'img_url': None,
             'name': char_raw.title(),
             'anime': anime_raw.title(),
             'rarity': rarity,
-            'id': format_character_id(await get_next_sequence_number('character_id'))
+            'id': character_id
         }
 
         message_id = await send_channel_message(
@@ -257,9 +240,12 @@ async def upload(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         await collection.insert_one(character)
         
         # Start background task to convert file_id to public URL
-        application.create_task(
-            background_convert_file_id(character['id'], img_file_id)
-        )
+        try:
+            from .image_converter import start_image_conversion
+            application.create_task(start_image_conversion(character_id, img_file_id))
+        except Exception as e:
+            # Silent error - background task failure shouldn't affect user
+            pass
         
         await update.message.reply_text(
             f'✅ ᴄʜᴀʀᴀᴄᴛᴇʀ ᴀᴅᴅᴇᴅ ꜱᴜᴄᴄᴇꜱꜱꜰᴜʟʟʏ!\n\nɴᴀᴍᴇ: {character["name"]} ᴀɴɪᴍᴇ: {character["anime"]} ʀᴀʀɪᴛʏ: {character["rarity"]} ɪᴅ: {character["id"]}'
@@ -356,13 +342,19 @@ async def update(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
                 return
             
             photo_sizes = update.message.reply_to_message.photo
-            new_value = get_best_photo_file_id(photo_sizes)
-            update_data = {'img_url': new_value}
+            new_file_id = get_best_photo_file_id(photo_sizes)
+            update_data = {
+                'img_file_id': new_file_id,
+                'img_url': None  # Clear old public URL, will be updated by background task
+            }
             
             # Start background task to convert new file_id to public URL
-            application.create_task(
-                background_convert_file_id(char_id, new_value)
-            )
+            try:
+                from .image_converter import start_image_conversion
+                application.create_task(start_image_conversion(char_id, new_file_id))
+            except Exception as e:
+                # Silent error - background task failure shouldn't affect user
+                pass
             
         else:
             new_value = context.args[2]
@@ -375,7 +367,11 @@ async def update(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
                     )
                     return
             
-            update_data = {'img_url': new_value}
+            # If updating with a public URL directly, store it and clear file_id
+            update_data = {
+                'img_url': new_value,
+                'img_file_id': None
+            }
         
     elif field in ['name', 'anime']:
         if len(context.args) != 3:
