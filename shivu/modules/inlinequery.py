@@ -92,8 +92,11 @@ async def inlinequery(update: Update, context: CallbackContext) -> None:
     # STRICT FILTERING: Only include characters with valid inline image URLs
     valid_characters = []
     for character in all_characters:
-        if is_valid_inline_photo_url(character.get('img_url')):
-            valid_characters.append(character)
+        img_url = character.get('img_url')
+        if img_url and is_valid_inline_photo_url(img_url):
+            # Ensure the character has all required fields
+            if all(key in character for key in ['id', 'name', 'anime', 'rarity']):
+                valid_characters.append(character)
     
     # Calculate pagination based on VALID characters only
     total_valid = len(valid_characters)
@@ -107,9 +110,10 @@ async def inlinequery(update: Update, context: CallbackContext) -> None:
 
     results = []
     for character in characters:
-        # Double-check URL validity (should already be filtered)
         img_url = character.get('img_url')
-        if not is_valid_inline_photo_url(img_url):
+        
+        # Final safety check
+        if not img_url or not is_valid_inline_photo_url(img_url):
             continue
             
         global_count = await user_collection.count_documents({'characters.id': character['id']})
@@ -135,14 +139,14 @@ async def inlinequery(update: Update, context: CallbackContext) -> None:
     try:
         # Only send results if we have valid ones
         if results:
-            await update.inline_query.answer(results, next_offset=next_offset, cache_time=5)
+            await update.inline_query.answer(results, next_offset=next_offset, cache_time=5, auto_pagination=True)
         else:
             # Send empty result if no valid images
             await update.inline_query.answer([], next_offset="", cache_time=5)
     except BadRequest as e:
         error_message = str(e).lower()
-        if "photo_invalid" in error_message:
-            # Final safety net: Send empty results if Telegram still rejects
+        if "photo_invalid" in error_message or "query_id_invalid" in error_message:
+            # Final safety net: Send empty results if Telegram rejects
             await update.inline_query.answer([], next_offset="", cache_time=5)
         else:
             # Re-raise other errors
