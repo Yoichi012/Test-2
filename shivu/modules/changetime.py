@@ -3,7 +3,8 @@ from pyrogram import Client, filters
 from pyrogram.enums import ChatMemberStatus
 from pyrogram.types import Message
 
-from shivu import user_totals_collection, shivuu, OWNER_ID
+from shivu import user_totals_collection, shivuu
+from shivu.config import OWNER_ID
 
 
 # =========================
@@ -13,7 +14,7 @@ from shivu import user_totals_collection, shivuu, OWNER_ID
 async def change_time_all_groups(client: Client, message: Message):
 
     # Only BOT OWNER
-    if message.from_user.id != OWNER_ID:
+    if message.from_user.id not in OWNER_ID:
         await message.reply_text("❌ Only Bot Owner can use this command.")
         return
 
@@ -60,7 +61,7 @@ async def change_time_all_groups(client: Client, message: Message):
 async def change_time_single_group(client: Client, message: Message):
 
     # Only BOT OWNER
-    if message.from_user.id != OWNER_ID:
+    if message.from_user.id not in OWNER_ID:
         await message.reply_text("❌ Only Bot Owner can use this command.")
         return
 
