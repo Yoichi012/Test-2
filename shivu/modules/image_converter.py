@@ -101,8 +101,23 @@ class ImageConverter:
 async def convert_and_update(character_id: str, file_id: str) -> bool:
     async with ImageConverter() as converter:
         try:
-            return await converter._perform_conversion(character_id, file_id)
-        except Exception:
+            result = await converter._perform_conversion(character_id, file_id)
+            
+            if result:
+                print(f"[IMAGE_CONVERTER] ✅ SUCCESS")
+                print(f"Character ID: {character_id}")
+                print(f"Public URL saved")
+            else:
+                print(f"[IMAGE_CONVERTER] ❌ FAILED")
+                print(f"Character ID: {character_id}")
+                print(f"Reason: download/upload/db error")
+                
+            return result
+            
+        except Exception as e:
+            print(f"[IMAGE_CONVERTER] ❌ FAILED")
+            print(f"Character ID: {character_id}")
+            print(f"Reason: {str(e)}")
             return False
 
 
