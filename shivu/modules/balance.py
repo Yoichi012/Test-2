@@ -17,11 +17,11 @@ from shivu import application, db, LOGGER, OWNER_ID, SUDO_USERS
 SMALL_CAPS_MAP = {
     'a': 'ᴀ', 'b': 'ʙ', 'c': 'ᴄ', 'd': 'ᴅ', 'e': 'ᴇ', 'f': 'ғ', 'g': 'ɢ',
     'h': 'ʜ', 'i': 'ɪ', 'j': 'ᴊ', 'k': 'ᴋ', 'l': 'ʟ', 'm': 'ᴍ', 'n': 'ɴ',
-    'o': 'ᴏ', 'p': 'ᴘ', 'q': 'ǫ', 'r': 'ʀ', 's': 's', 't': 'ᴛ', 'u': 'ᴜ',
+    'o': 'ᴏ', 'p': 'ᴘ', 'q': 'ǫ', 'r': 'ʀ', 's': 'ꜱ', 't': 'ᴛ', 'u': 'ᴜ',
     'v': 'ᴠ', 'w': 'ᴡ', 'x': 'x', 'y': 'ʏ', 'z': 'ᴢ',
     'A': 'ᴀ', 'B': 'ʙ', 'C': 'ᴄ', 'D': 'ᴅ', 'E': 'ᴇ', 'F': 'ғ', 'G': 'ɢ',
     'H': 'ʜ', 'I': 'ɪ', 'J': 'ᴊ', 'K': 'ᴋ', 'L': 'ʟ', 'M': 'ᴍ', 'N': 'ɴ',
-    'O': 'ᴏ', 'P': 'ᴘ', 'Q': 'ǫ', 'R': 'ʀ', 'S': 's', 'T': 'ᴛ', 'U': 'ᴜ',
+    'O': 'ᴏ', 'P': 'ᴘ', 'Q': 'ǫ', 'R': 'ʀ', 'S': 'ꜱ', 'T': 'ᴛ', 'U': 'ᴜ',
     'V': 'ᴠ', 'W': 'ᴡ', 'X': 'x', 'Y': 'ʏ', 'Z': 'ᴢ',
     ' ': ' ', ':': ':', '!': '!', '?': '?', '.': '.', ',': ',', '-': '-',
     '(': '(', ')': ')', '[': '[', ']': ']', '{': '{', '}': '}', '=': '=',
@@ -132,7 +132,7 @@ async def validate_payment_target(target_id: int, context: ContextTypes.DEFAULT_
         return True, None
     except Exception as e:
         LOGGER.error(f"Error validating payment target {target_id}: {e}")
-        return False, "✘ ɪɴᴠᴀʟɪᴅ ᴛᴀʀɢᴇᴛ ᴜsᴇʀ."
+        return False, "✘ ɪɴᴠᴀʟɪᴅ ᴛᴀʀɢᴇᴛ ᴜꜱᴇʀ."
 
 # ---------- Helpers ----------
 async def _ensure_balance_doc(user_id: int) -> Dict[str, Any]:
@@ -418,7 +418,7 @@ async def admin_addbal_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     """/addbal <user_id> <amount> - admin-only adjust balance."""
     user_id = update.effective_user.id
     if user_id != OWNER_ID and user_id not in SUDO_USERS:
-        await update.message.reply_text(premium_format("✖️ ɴᴏᴛ ᴀᴜᴛʜᴏʀɪᴢᴇᴅ."))
+        await update.message.reply_text(premium_format("✘ ɴᴏᴛ ᴀᴜᴛʜᴏʀɪᴢᴇᴅ."))
         return
 
     if len(context.args) < 2:
@@ -429,7 +429,7 @@ async def admin_addbal_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         target = int(context.args[0])
         amount = int(context.args[1])
     except ValueError:
-        await update.message.reply_text(premium_format("✖️ ɪɴᴠᴀʟɪᴅ ᴀʀɢᴜᴍᴇɴᴛs."))
+        await update.message.reply_text(premium_format("✘ ɪɴᴠᴀʟɪᴅ ᴀʀɢᴜᴍᴇɴᴛs."))
         return
 
     try:
