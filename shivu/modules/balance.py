@@ -127,7 +127,18 @@ async def balance_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
     user_id = getattr(target, "id", update.effective_user.id)
     bal = await get_balance(user_id)
     name = escape(getattr(target, "first_name", str(user_id)))
-    await update.message.reply_text(f"💰 <b>{name}</b>'s Balance: <b>{bal:,}</b> coins", parse_mode="HTML")
+    
+    # Premium balance display
+    progress_fill = min(int((bal % 10000) / 10000 * 10), 10)  # Visual progress indicator
+    progress_bar = "[" + "■" * progress_fill + "□" * (10 - progress_fill) + "]"
+    
+    await update.message.reply_text(
+        f"◆  ᴡᴀʟʟᴇᴛ  sᴛᴀᴛᴜs  ━━━━━━━━━━━━━━━━━\n\n"
+        f"• ᴜsᴇʀ: <b>{name}</b>\n"
+        f"• ʙᴀʟᴀɴᴄᴇ: <b>{bal:,} ᴄᴏɪɴs</b>\n"
+        f"• ᴠᴀᴜʟᴛ: {progress_bar}",
+        parse_mode="HTML"
+    )
 
 
 async def pay_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -136,7 +147,11 @@ async def pay_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     Initiate a payment — creates a pending confirmation with Confirm/Cancel buttons.
     """
     if not context.args and not update.message.reply_to_message:
-        await update.message.reply_text("Usage: /pay <user_id|@username> <amount>  (or reply with /pay <amount>)")
+        await update.message.reply_text(
+            "◆ ᴛʀᴀɴsғᴇʀ ɢᴜɪᴅᴇ ━━━━━━━━━━━━━━━━━\n\n"
+            "• ᴜsᴀɢᴇ: /pay <ᴜsᴇʀ_ɪᴅ|@ᴜsᴇʀɴᴀᴍᴇ> <ᴀᴍᴏᴜɴᴛ>\n"
+            "• ᴀʟᴛᴇʀɴᴀᴛᴇ: ʀᴇᴘʟʏ ᴡɪᴛʜ /pay <ᴀᴍᴏᴜɴᴛ>"
+        )
         return
 
     sender = update.effective_user
@@ -146,7 +161,13 @@ async def pay_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     next_allowed = pay_cooldowns.get(sender.id, 0)
     if now < next_allowed:
         remaining = int(next_allowed - now)
-        await update.message.reply_text(f"⏳ You must wait {remaining}s before starting another payment.")
+        cooldown_bar = "[" + "■" * (10 - min(remaining, 10)) + "□" * min(remaining, 10) + "]"
+        await update.message.reply_text(
+            f"◆ ᴄᴏᴏʟᴅᴏᴡɴ ᴀᴄᴛɪᴠᴇ ━━━━━━━━━━━━━━━━━\n\n"
+            f"• ᴡᴀɪᴛ ᴛɪᴍᴇ: {remaining}s\n"
+            f"• ʀᴇᴍᴀɪɴɪɴɢ: {cooldown_bar}\n\n"
+            f"ɴᴇxᴛ ᴛʀᴀɴsᴀᴄᴛɪᴏɴ ᴀᴠᴀɪʟᴀʙʟᴇ sᴏᴏɴ..."
+        )
         return
 
     # Resolve target and amount
@@ -160,7 +181,10 @@ async def pay_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     else:
         # /pay <target> <amount>
         if len(context.args) < 2:
-            await update.message.reply_text("Usage: /pay <user_id|@username|reply> <amount>")
+            await update.message.reply_text(
+                "◆ ɪɴᴠᴀʟɪᴅ sʏɴᴛᴀx ━━━━━━━━━━━━━━━━━\n\n"
+                "• ᴜsᴀɢᴇ: /pay <ᴜsᴇʀ_ɪᴅ|@ᴜsᴇʀɴᴀᴍᴇ|ʀᴇᴘʟʏ> <ᴀᴍᴏᴜɴᴛ>"
+            )
             return
         raw_target = context.args[0]
         amount_str = context.args[1]
@@ -174,28 +198,51 @@ async def pay_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
                 target_id = None
 
     if not target_id:
-        await update.message.reply_text("Could not resolve target user. Use user id, @username or reply to their message.")
+        await update.message.reply_text(
+            "◆ ᴜsᴇʀ ɴᴏᴛ ғᴏᴜɴᴅ ━━━━━━━━━━━━━━━━━\n\n"
+            "• ᴜsᴇ ᴠᴀʟɪᴅ ᴜsᴇʀ ɪᴅ\n"
+            "• ᴏʀ @ᴜsᴇʀɴᴀᴍᴇ\n"
+            "• ᴏʀ ʀᴇᴘʟʏ ᴛᴏ ᴛʜᴇɪʀ ᴍᴇssᴀɢᴇ"
+        )
         return
 
     if target_id == sender.id:
-        await update.message.reply_text("You cannot pay yourself.")
+        await update.message.reply_text(
+            "◆ sᴇʟғ-ᴛʀᴀɴsғᴇʀ ɴᴏᴛ ᴀʟʟᴏᴡᴇᴅ ━━━━━━━━━━━━━━━━━\n\n"
+            "• ᴛʀᴀɴsᴀᴄᴛɪᴏɴs ᴛᴏ sᴇʟғ ᴀʀᴇ ʀᴇsᴛʀɪᴄᴛᴇᴅ\n"
+            "• ᴜsᴇ ᴀɴᴏᴛʜᴇʀ ᴡᴀʟʟᴇᴛ ᴀᴅᴅʀᴇss"
+        )
         return
 
     # parse amount
     try:
         amount = int(amount_str)
     except Exception:
-        await update.message.reply_text("Invalid amount. Use a positive integer.")
+        await update.message.reply_text(
+            "◆ ɪɴᴠᴀʟɪᴅ ᴀᴍᴏᴜɴᴛ ━━━━━━━━━━━━━━━━━\n\n"
+            "• ᴜsᴇ ᴀ ᴘᴏsɪᴛɪᴠᴇ ɪɴᴛᴇɢᴇʀ ᴠᴀʟᴜᴇ\n"
+            "• ᴅᴇᴄɪᴍᴀʟs ɴᴏᴛ sᴜᴘᴘᴏʀᴛᴇᴅ"
+        )
         return
 
     if amount <= 0:
-        await update.message.reply_text("Amount must be greater than zero.")
+        await update.message.reply_text(
+            "◆ ᴍɪɴɪᴍᴜᴍ ᴀᴍᴏᴜɴᴛ ━━━━━━━━━━━━━━━━━\n\n"
+            "• ᴛʀᴀɴsғᴇʀ ᴀᴍᴏᴜɴᴛ ᴍᴜsᴛ ʙᴇ > 𝟶\n"
+            "• ᴍɪɴɪᴍᴜᴍ: 𝟷 ᴄᴏɪɴ"
+        )
         return
 
     # Check sender balance quickly (best-effort)
     bal = await get_balance(sender.id)
     if bal < amount:
-        await update.message.reply_text(f"❌ You don't have enough coins. Your balance: {bal:,}")
+        await update.message.reply_text(
+            f"◆ ɪɴsᴜғғɪᴄɪᴇɴᴛ ғᴜɴᴅs ━━━━━━━━━━━━━━━━━\n\n"
+            f"• ʏᴏᴜʀ ʙᴀʟᴀɴᴄᴇ: <b>{bal:,} ᴄᴏɪɴs</b>\n"
+            f"• ʀᴇǫᴜɪʀᴇᴅ: <b>{amount:,} ᴄᴏɪɴs</b>\n"
+            f"• ᴅᴇғɪᴄɪᴛ: <b>{amount - bal:,} ᴄᴏɪɴs</b>",
+            parse_mode="HTML"
+        )
         return
 
     # Create pending payment
@@ -219,17 +266,18 @@ async def pay_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
     sender_name = escape(getattr(sender, "first_name", str(sender.id)))
     text = (
-        f"⚠️ <b>Payment Confirmation</b>\n\n"
-        f"Sender: <a href='tg://user?id={sender.id}'>{sender_name}</a>\n"
-        f"Recipient: <a href='tg://user?id={target_id}'>{target_name}</a>\n"
-        f"Amount: <b>{amount:,}</b> coins\n\n"
-        f"Are you sure you want to proceed?"
+        f"◆ ᴘᴇɴᴅɪɴɢ ᴛʀᴀɴsᴀᴄᴛɪᴏɴ ━━━━━━━━━━━━━━━━━\n\n"
+        f"• sᴇɴᴅᴇʀ: <a href='tg://user?id={sender.id}'>{sender_name}</a>\n"
+        f"• ʀᴇᴄɪᴘɪᴇɴᴛ: <a href='tg://user?id={target_id}'>{target_name}</a>\n"
+        f"• ᴀᴍᴏᴜɴᴛ: <b>{amount:,} ᴄᴏɪɴs</b>\n"
+        f"• ɪᴅ: <code>{token[:8]}...{token[-4:]}</code>\n\n"
+        f"ᴄᴏɴғɪʀᴍ ᴛʜɪs ᴛʀᴀɴsғᴇʀ?"
     )
 
     keyboard = InlineKeyboardMarkup([
         [
-            InlineKeyboardButton("✅ Confirm", callback_data=f"pay_confirm:{token}"),
-            InlineKeyboardButton("❌ Cancel", callback_data=f"pay_cancel:{token}")
+            InlineKeyboardButton("✔ ᴄᴏɴғɪʀᴍ", callback_data=f"pay_confirm:{token}"),
+            InlineKeyboardButton("✘ ᴄᴀɴᴄᴇʟ", callback_data=f"pay_cancel:{token}")
         ]
     ])
 
@@ -254,7 +302,11 @@ async def pay_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     pending = pending_payments.get(token)
     if not pending:
         try:
-            await query.edit_message_text("❌ This payment request has expired or is invalid.")
+            await query.edit_message_text(
+                "◆ ᴛʀᴀɴsᴀᴄᴛɪᴏɴ ɪɴᴠᴀʟɪᴅ ━━━━━━━━━━━━━━━━━\n\n"
+                "• ᴇxᴘɪʀᴇᴅ ᴏʀ ɪɴᴠᴀʟɪᴅ ʀᴇǫᴜᴇsᴛ\n"
+                "• ɪɴɪᴛɪᴀᴛᴇ ɴᴇᴡ ᴛʀᴀɴsғᴇʀ"
+            )
         except Exception:
             pass
         return
@@ -275,7 +327,11 @@ async def pay_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     if time.time() - created_at > PENDING_EXPIRY_SECONDS:
         # expired
         try:
-            await query.edit_message_text("⏳ This payment request has expired.")
+            await query.edit_message_text(
+                "◆ ᴛʀᴀɴsᴀᴄᴛɪᴏɴ ᴇxᴘɪʀᴇᴅ ━━━━━━━━━━━━━━━━━\n\n"
+                "• 5-ᴍɪɴᴜᴛᴇ ᴠᴀʟɪᴅɪᴛʏ ᴇxᴘɪʀᴇᴅ\n"
+                "• ɪɴɪᴛɪᴀᴛᴇ ɴᴇᴡ ᴛʀᴀɴsғᴇʀ"
+            )
         except Exception:
             pass
         pending_payments.pop(token, None)
@@ -283,7 +339,11 @@ async def pay_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 
     if action == "pay_cancel":
         try:
-            await query.edit_message_text("❌ Payment cancelled by sender.")
+            await query.edit_message_text(
+                "◆ ᴛʀᴀɴsᴀᴄᴛɪᴏɴ ᴄᴀɴᴄᴇʟʟᴇᴅ ━━━━━━━━━━━━━━━━━\n\n"
+                "• ʀᴇǫᴜᴇsᴛ ᴛᴇʀᴍɪɴᴀᴛᴇᴅ ʙʏ sᴇɴᴅᴇʀ\n"
+                "• ғᴜɴᴅs ʀᴇᴍᴀɪɴ ᴜɴᴄʜᴀɴɢᴇᴅ"
+            )
         except Exception:
             pass
         pending_payments.pop(token, None)
@@ -295,7 +355,13 @@ async def pay_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     next_allowed = pay_cooldowns.get(sender_id, 0)
     if now < next_allowed:
         remaining = int(next_allowed - now)
-        await query.edit_message_text(f"⏳ You must wait {remaining}s before making another payment.")
+        cooldown_bar = "[" + "□" * min(remaining, 10) + "■" * (10 - min(remaining, 10)) + "]"
+        await query.edit_message_text(
+            f"◆ ᴄᴏᴏʟᴅᴏᴡɴ ᴀᴄᴛɪᴠᴇ ━━━━━━━━━━━━━━━━━\n\n"
+            f"• ᴡᴀɪᴛ ᴛɪᴍᴇ: {remaining}s\n"
+            f"• sᴛᴀᴛᴜs: {cooldown_bar}\n\n"
+            f"ᴛʀʏ ᴀɢᴀɪɴ sʜᴏʀᴛʟʏ..."
+        )
         pending_payments.pop(token, None)
         return
 
@@ -304,7 +370,12 @@ async def pay_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     if not success:
         # likely insufficient funds or error
         try:
-            await query.edit_message_text("❌ Transaction failed: insufficient funds or internal error.")
+            await query.edit_message_text(
+                "◆ ᴛʀᴀɴsᴀᴄᴛɪᴏɴ ғᴀɪʟᴇᴅ ━━━━━━━━━━━━━━━━━\n\n"
+                "• ɪɴsᴜғғɪᴄɪᴇɴᴛ ғᴜɴᴅs\n"
+                "• ᴏʀ ɪɴᴛᴇʀɴᴀʟ ᴇʀʀᴏʀ\n\n"
+                "ᴄʜᴇᴄᴋ ʏᴏᴜʀ ʙᴀʟᴀɴᴄᴇ"
+            )
         except Exception:
             pass
         pending_payments.pop(token, None)
@@ -319,11 +390,13 @@ async def pay_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         target_chat = await context.bot.get_chat(target_id)
         target_name = escape(getattr(target_chat, "first_name", str(target_id)))
         confirmed_text = (
-            f"✅ <b>Payment Successful</b>\n\n"
-            f"Sender: <a href='tg://user?id={sender_id}'>{sender_name}</a>\n"
-            f"Recipient: <a href='tg://user?id={target_id}'>{target_name}</a>\n"
-            f"Amount: <b>{amount:,}</b> coins\n\n"
-            f"Next payment allowed after {PAY_COOLDOWN_SECONDS} seconds."
+            f"◆ ᴛʀᴀɴsᴀᴄᴛɪᴏɴ sᴜᴄᴄᴇssғᴜʟ ━━━━━━━━━━━━━━━━━\n\n"
+            f"• sᴇɴᴅᴇʀ: <a href='tg://user?id={sender_id}'>{sender_name}</a>\n"
+            f"• ʀᴇᴄɪᴘɪᴇɴᴛ: <a href='tg://user?id={target_id}'>{target_name}</a>\n"
+            f"• ᴀᴍᴏᴜɴᴛ: <b>{amount:,} ᴄᴏɪɴs</b>\n"
+            f"• sᴛᴀᴛᴜs: ᴠᴇʀɪғɪᴇᴅ\n"
+            f"• ᴛxɪᴅ: <code>{token[:12]}...</code>\n\n"
+            f"ɴᴇxᴛ ᴛʀᴀɴsғᴇʀ ɪɴ {PAY_COOLDOWN_SECONDS}s"
         )
         await query.edit_message_text(confirmed_text, parse_mode="HTML")
     except Exception:
@@ -339,25 +412,47 @@ async def admin_addbal_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     """
     user_id = update.effective_user.id
     if user_id != OWNER_ID and user_id not in SUDO_USERS:
-        await update.message.reply_text("Not authorized.")
+        await update.message.reply_text(
+            "◆ ᴀᴄᴄᴇss ᴅᴇɴɪᴇᴅ ━━━━━━━━━━━━━━━━━\n\n"
+            "• ɪɴsᴜғғɪᴄɪᴇɴᴛ ᴘʀɪᴠɪʟᴇɢᴇs\n"
+            "• ᴀᴅᴍɪɴ ᴄᴏᴍᴍᴀɴᴅ ᴏɴʟʏ"
+        )
         return
 
     if len(context.args) < 2:
-        await update.message.reply_text("Usage: /addbal <user_id> <amount>")
+        await update.message.reply_text(
+            "◆ ᴀᴅᴍɪɴ: ᴀᴅᴊᴜsᴛ ʙᴀʟᴀɴᴄᴇ ━━━━━━━━━━━━━━━━━\n\n"
+            "• ᴜsᴀɢᴇ: /addbal <ᴜsᴇʀ_ɪᴅ> <ᴀᴍᴏᴜɴᴛ>\n"
+            "• ᴘᴏsɪᴛɪᴠᴇ/ɴᴇɢᴀᴛɪᴠᴇ ᴠᴀʟᴜᴇs ᴀʟʟᴏᴡᴇᴅ"
+        )
         return
 
     try:
         target = int(context.args[0])
         amount = int(context.args[1])
     except ValueError:
-        await update.message.reply_text("Invalid arguments.")
+        await update.message.reply_text(
+            "◆ ɪɴᴠᴀʟɪᴅ ᴘᴀʀᴀᴍᴇᴛᴇʀs ━━━━━━━━━━━━━━━━━\n\n"
+            "• ᴜsᴇʀ_ɪᴅ ᴍᴜsᴛ ʙᴇ ɪɴᴛᴇɢᴇʀ\n"
+            "• ᴀᴍᴏᴜɴᴛ ᴍᴜsᴛ ʙᴇ ɪɴᴛᴇɢᴇʀ"
+        )
         return
 
     try:
         new_bal = await change_balance(target, amount)
-        await update.message.reply_text(f"Updated balance for <a href='tg://user?id={target}'>user</a>: <b>{new_bal:,}</b>", parse_mode="HTML")
+        await update.message.reply_text(
+            f"◆ ʙᴀʟᴀɴᴄᴇ ᴜᴘᴅᴀᴛᴇᴅ ━━━━━━━━━━━━━━━━━\n\n"
+            f"• ᴜsᴇʀ: <a href='tg://user?id={target}'>ᴡᴀʟʟᴇᴛ</a>\n"
+            f"• ᴀᴅᴊᴜsᴛᴍᴇɴᴛ: {amount:+,} ᴄᴏɪɴs\n"
+            f"• ɴᴇᴡ ʙᴀʟᴀɴᴄᴇ: <b>{new_bal:,} ᴄᴏɪɴs</b>",
+            parse_mode="HTML"
+        )
     except Exception:
-        await update.message.reply_text("Failed to update balance.")
+        await update.message.reply_text(
+            "◆ ᴜᴘᴅᴀᴛᴇ ғᴀɪʟᴇᴅ ━━━━━━━━━━━━━━━━━\n\n"
+            "• ᴅᴀᴛᴀʙᴀsᴇ ᴇʀʀᴏʀ\n"
+            "• ᴛʀʏ ᴀɢᴀɪɴ ʟᴀᴛᴇʀ"
+        )
 
 
 # Register handlers
