@@ -176,6 +176,25 @@ async def send_channel_message(
             return message.message_id
         raise
 
+async def background_convert_file_id(character_id: str, file_id: str) -> None:
+    """Background task to convert Telegram file_id to public URL for inline queries."""
+    try:
+        # Import the converter module
+        from shivu.module.image_converter import convert_file_id_to_url
+        
+        # Convert file_id to public URL
+        public_url = await convert_file_id_to_url(character_id, file_id)
+        
+        # Update the database with the public URL
+        if public_url:
+            await collection.update_one(
+                {'id': character_id},
+                {'$set': {'img_url': public_url}}
+            )
+    except Exception as e:
+        # Silent error handling - log but don't crash
+        print(f"Background conversion failed for character {character_id}: {e}")
+
 async def upload(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if update.effective_user.id not in Config.SUDO_USERS:
         await update.message.reply_text('🔒 ᴀꜱᴋ ᴍʏ ᴏᴡɴᴇʀ...')
@@ -236,6 +255,11 @@ async def upload(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         character['message_id'] = message_id
 
         await collection.insert_one(character)
+        
+        # Start background task to convert file_id to public URL
+        application.create_task(
+            background_convert_file_id(character['id'], img_file_id)
+        )
         
         await update.message.reply_text(
             f'✅ ᴄʜᴀʀᴀᴄᴛᴇʀ ᴀᴅᴅᴇᴅ ꜱᴜᴄᴄᴇꜱꜱꜰᴜʟʟʏ!\n\nɴᴀᴍᴇ: {character["name"]} ᴀɴɪᴍᴇ: {character["anime"]} ʀᴀʀɪᴛʏ: {character["rarity"]} ɪᴅ: {character["id"]}'
@@ -334,6 +358,11 @@ async def update(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             photo_sizes = update.message.reply_to_message.photo
             new_value = get_best_photo_file_id(photo_sizes)
             update_data = {'img_url': new_value}
+            
+            # Start background task to convert new file_id to public URL
+            application.create_task(
+                background_convert_file_id(char_id, new_value)
+            )
             
         else:
             new_value = context.args[2]
