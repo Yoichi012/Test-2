@@ -1,4 +1,3 @@
-```python name=shivu/modules/balance.py
 import time
 import uuid
 from html import escape
@@ -366,4 +365,3 @@ application.add_handler(CommandHandler(["balance", "bal"], balance_cmd, block=Fa
 application.add_handler(CommandHandler("pay", pay_cmd, block=False))
 application.add_handler(CallbackQueryHandler(pay_callback, pattern=r"^pay_", block=False))
 application.add_handler(CommandHandler("addbal", admin_addbal_cmd, block=False))
-```
