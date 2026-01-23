@@ -7,6 +7,7 @@ from pymongo import MongoClient, ASCENDING
 from telegram import Update, InlineQueryResultPhoto
 from telegram.ext import InlineQueryHandler, CallbackContext, CommandHandler 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.error import BadRequest
 
 from shivu import user_collection, collection, application, db
 
@@ -23,6 +24,21 @@ db.user_collection.create_index([('characters.img_url', ASCENDING)])
 
 all_characters_cache = TTLCache(maxsize=10000, ttl=36000)
 user_collection_cache = TTLCache(maxsize=10000, ttl=60)
+
+def is_valid_inline_photo_url(img_url: str) -> bool:
+    """Check if image URL is valid for Telegram inline mode."""
+    if not img_url:
+        return False
+    
+    # Skip Telegram file_ids (starts with 'Ag')
+    if isinstance(img_url, str) and img_url.startswith('Ag'):
+        return False
+    
+    # Must be a valid HTTP/HTTPS URL
+    if not isinstance(img_url, str) or not img_url.startswith(('http://', 'https://')):
+        return False
+    
+    return True
 
 async def inlinequery(update: Update, context: CallbackContext) -> None:
     query = update.inline_query.query
@@ -66,6 +82,10 @@ async def inlinequery(update: Update, context: CallbackContext) -> None:
 
     results = []
     for character in characters:
+        # Skip characters with invalid image URLs for inline mode
+        if not is_valid_inline_photo_url(character.get('img_url')):
+            continue
+            
         global_count = await user_collection.count_documents({'characters.id': character['id']})
         anime_characters = await collection.count_documents({'anime': character['anime']})
 
@@ -85,6 +105,23 @@ async def inlinequery(update: Update, context: CallbackContext) -> None:
             )
         )
 
-    await update.inline_query.answer(results, next_offset=next_offset, cache_time=5)
+    try:
+        await update.inline_query.answer(results, next_offset=next_offset, cache_time=5)
+    except BadRequest as e:
+        error_message = str(e).lower()
+        if "photo_invalid" in error_message or "photo_invalid" in error_message:
+            # Filter out any remaining invalid results and retry
+            filtered_results = []
+            for result in results:
+                if hasattr(result, 'photo_url') and is_valid_inline_photo_url(result.photo_url):
+                    filtered_results.append(result)
+            
+            if filtered_results:
+                await update.inline_query.answer(filtered_results, next_offset=next_offset, cache_time=5)
+            else:
+                # If no valid results, send empty answer
+                await update.inline_query.answer([], next_offset="", cache_time=5)
+        else:
+            raise
 
 application.add_handler(InlineQueryHandler(inlinequery, block=False))
