@@ -40,7 +40,7 @@ last_user: Dict[str, Dict[str, Any]] = {}
 warned_users: Dict[int, float] = {}
 
 # Helper utilities
-_escape_markdown_re = re.compile(r'([\\*_`~>#+=\-|{}.!])')
+_escape_markdown_re = re.compile(r'([\\*_`~>#+=\\-|{}.!])')
 def escape_markdown(text: str) -> str:
     """Escape Markdown-ish characters (kept for legacy usage)."""
     return _escape_markdown_re.sub(r'\\\1', text or '')
