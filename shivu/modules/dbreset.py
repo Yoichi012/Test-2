@@ -56,13 +56,14 @@ async def dbreset_step_one(client: Client, message: Message):
     }
 
     await message.reply_text(
-        "⚠️ **FULL DATABASE RESET – STEP 1** ⚠️\n\n"
-        "This will **DELETE THE ENTIRE DATABASE**.\n"
-        "All collections, data & indexes will be lost.\n\n"
-        "To confirm, run:\n"
-        f"`/dbreset confirm {token}`\n\n"
-        "⏱ Token valid for **60 seconds**."
-    )
+    "⚠️ FULL DATABASE RESET – STEP 1 ⚠️\n\n"
+    "This will DELETE THE ENTIRE DATABASE.\n"
+    "All collections, data & indexes will be lost.\n\n"
+    "To confirm, run:\n"
+    f"/dbreset confirm {token}\n\n"
+    "Token valid for 60 seconds.",
+    parse_mode=None
+)
 
 
 # =========================
