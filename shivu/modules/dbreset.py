@@ -15,7 +15,7 @@ from shivu.config import Config
 OWNER_ID = 7818323042
 RESET_PASSWORD = "@Piyush"
 CONFIRM_TIMEOUT = 60  # seconds
-DB_NAME = "shivu_db"  # 🔥 YOUR DATABASE NAME
+DB_NAME = "shivu_db"
 
 _pending = {}
 
@@ -35,20 +35,23 @@ async def dbreset_step_one(client: Client, message: Message):
     if not message.from_user:
         return
 
-    # 🔕 silent for non-owner
+    # silent ignore for non-owner
     if message.from_user.id != OWNER_ID:
         return
 
     args = message.command
 
+    # password check
     if len(args) != 2 or args[1] != RESET_PASSWORD:
         await message.reply_text(
-            "❌ **Invalid or Missing Password**\n\n"
+            "Invalid or missing password.\n\n"
             "Usage:\n"
-            "`/dbreset <password>`"
+            "/dbreset <password>",
+            parse_mode=None
         )
         return
 
+    # generate token
     token = uuid.uuid4().hex[:6].upper()
     _pending[OWNER_ID] = {
         "token": token,
@@ -56,14 +59,14 @@ async def dbreset_step_one(client: Client, message: Message):
     }
 
     await message.reply_text(
-    "⚠️ FULL DATABASE RESET – STEP 1 ⚠️\n\n"
-    "This will DELETE THE ENTIRE DATABASE.\n"
-    "All collections, data & indexes will be lost.\n\n"
-    "To confirm, run:\n"
-    f"/dbreset confirm {token}\n\n"
-    "Token valid for 60 seconds.",
-    parse_mode=None
-)
+        "FULL DATABASE RESET - STEP 1\n\n"
+        "This will DELETE THE ENTIRE DATABASE.\n"
+        "All collections, data and indexes will be removed.\n\n"
+        "To confirm, run this command:\n"
+        f"/dbreset confirm {token}\n\n"
+        "Token valid for 60 seconds.",
+        parse_mode=None
+    )
 
 
 # =========================
@@ -75,7 +78,7 @@ async def dbreset_step_two(client: Client, message: Message):
     if not message.from_user:
         return
 
-    # 🔕 silent for non-owner
+    # silent ignore for non-owner
     if message.from_user.id != OWNER_ID:
         return
 
@@ -85,31 +88,45 @@ async def dbreset_step_two(client: Client, message: Message):
 
     data = _pending.get(OWNER_ID)
     if not data:
-        await message.reply_text("❌ No active reset request found.")
+        await message.reply_text(
+            "No active reset request found.",
+            parse_mode=None
+        )
         return
 
-    # token expiry
+    # token expiry check
     if time.time() - data["time"] > CONFIRM_TIMEOUT:
         _pending.pop(OWNER_ID, None)
-        await message.reply_text("⏱ Token expired. Run `/dbreset <password>` again.")
+        await message.reply_text(
+            "Token expired. Run /dbreset <password> again.",
+            parse_mode=None
+        )
         return
 
+    # token match check
     if args[2].upper() != data["token"]:
-        await message.reply_text("❌ Invalid confirmation token.")
+        await message.reply_text(
+            "Invalid confirmation token.",
+            parse_mode=None
+        )
         return
 
     # =========================
-    # 💣 DROP DATABASE
+    # DROP DATABASE
     # =========================
     try:
         await mongo_client.drop_database(DB_NAME)
         _pending.pop(OWNER_ID, None)
 
         await message.reply_text(
-            "✅ **DATABASE RESET COMPLETE**\n\n"
-            f"💥 Dropped Database: `{DB_NAME}`\n"
-            "🚀 MongoDB will start fresh on next use."
+            "DATABASE RESET COMPLETE\n\n"
+            f"Dropped database: {DB_NAME}\n"
+            "MongoDB will start fresh on next use.",
+            parse_mode=None
         )
 
     except Exception as e:
-        await message.reply_text(f"❌ Reset failed:\n`{e}`")
+        await message.reply_text(
+            f"Database reset failed:\n{e}",
+            parse_mode=None
+        )
