@@ -1,20 +1,30 @@
 from pymongo import ReturnDocument
 from pyrogram import Client, filters
-from pyrogram.enums import ChatMemberStatus
 from pyrogram.types import Message
 
 from shivu import user_totals_collection, shivuu
 from shivu.config import OWNER_ID
 
 
+# -------------------------
+# Owner check helper
+# -------------------------
+def is_owner(user_id: int) -> bool:
+    if isinstance(OWNER_ID, (list, tuple, set)):
+        return user_id in OWNER_ID
+    return user_id == OWNER_ID
+
+
 # =========================
-# 1️⃣ /changetime
+# 1️⃣ /changetime (ALL GROUPS)
 # =========================
 @shivuu.on_message(filters.command("changetime"))
 async def change_time_all_groups(client: Client, message: Message):
 
-    # Only BOT OWNER
-    if message.from_user.id not in OWNER_ID:
+    if not message.from_user:
+        return
+
+    if not is_owner(message.from_user.id):
         await message.reply_text("❌ Only Bot Owner can use this command.")
         return
 
@@ -31,7 +41,7 @@ async def change_time_all_groups(client: Client, message: Message):
         await message.reply_text("❌ Frequency must be a number.")
         return
 
-    # Minimum limit = 50
+    # Minimum limit for GLOBAL change
     if new_frequency < 50:
         await message.reply_text(
             "⚠️ Frequency must be **>= 50** for global change."
@@ -55,13 +65,15 @@ async def change_time_all_groups(client: Client, message: Message):
 
 
 # =========================
-# 2️⃣ /ctime
+# 2️⃣ /ctime (SINGLE GROUP)
 # =========================
 @shivuu.on_message(filters.command("ctime") & filters.group)
 async def change_time_single_group(client: Client, message: Message):
 
-    # Only BOT OWNER
-    if message.from_user.id not in OWNER_ID:
+    if not message.from_user:
+        return
+
+    if not is_owner(message.from_user.id):
         await message.reply_text("❌ Only Bot Owner can use this command.")
         return
 
