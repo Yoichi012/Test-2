@@ -11,7 +11,7 @@ from contextlib import asynccontextmanager
 import aiohttp
 from aiohttp import ClientSession, TCPConnector
 from pymongo import ReturnDocument, ASCENDING
-from telegram import Update, InputFile, Message, PhotoSize, Document
+from telegram import Update, InputFile, Message, PhotoSize, Document, InputMediaPhoto, InputMediaDocument
 from telegram.ext import CommandHandler, ContextTypes
 from telegram.error import TelegramError, NetworkError, TimedOut, BadRequest
 
@@ -568,36 +568,83 @@ class TelegramUploader:
         context: ContextTypes.DEFAULT_TYPE,
         old_message_id: Optional[int] = None
     ) -> Optional[int]:
-        """Update existing channel message"""
+        """Update existing channel message with new media"""
         try:
-            if old_message_id:
-                caption = character.get_caption("Updated")
-                await context.bot.edit_message_caption(
-                    chat_id=CHARA_CHANNEL_ID,
-                    message_id=old_message_id,
-                    caption=caption,
-                    parse_mode='HTML'
+            if not old_message_id:
+                # No existing message, send new one
+                return await TelegramUploader.upload_to_channel(
+                    character, 
+                    context, 
+                    character.media_file.telegram_file_id or character.media_file.catbox_url, 
+                    True
                 )
+            
+            caption = character.get_caption("Updated")
+            
+            # Try to edit the media (photo or document)
+            try:
+                if character.media_file.media_type == MediaType.PHOTO:
+                    media = InputMediaPhoto(
+                        media=character.media_file.catbox_url or character.media_file.telegram_file_id,
+                        caption=caption,
+                        parse_mode='HTML'
+                    )
+                    await context.bot.edit_message_media(
+                        chat_id=CHARA_CHANNEL_ID,
+                        message_id=old_message_id,
+                        media=media
+                    )
+                else:  # DOCUMENT
+                    media = InputMediaDocument(
+                        media=character.media_file.catbox_url or character.media_file.telegram_file_id,
+                        caption=caption,
+                        parse_mode='HTML'
+                    )
+                    await context.bot.edit_message_media(
+                        chat_id=CHARA_CHANNEL_ID,
+                        message_id=old_message_id,
+                        media=media
+                    )
                 return old_message_id
-            else:
-                # Upload new message with file_id
-                return await TelegramUploader.upload_to_channel(
-                    character, 
-                    context, 
-                    character.media_file.telegram_file_id, 
-                    True
-                )
                 
-        except BadRequest as e:
-            error_msg = str(e).lower()
-            if "not found" in error_msg or "message to edit not found" in error_msg:
-                return await TelegramUploader.upload_to_channel(
-                    character, 
-                    context, 
-                    character.media_file.telegram_file_id, 
-                    True
-                )
-            raise
+            except BadRequest as e:
+                error_msg = str(e).lower()
+                # If edit_message_media fails (message too old, not found, etc.), send new message
+                if "message not found" in error_msg or "message to edit not found" in error_msg or "message can't be edited" in error_msg:
+                    # Send new message and return new message_id
+                    return await TelegramUploader.upload_to_channel(
+                        character, 
+                        context, 
+                        character.media_file.catbox_url or character.media_file.telegram_file_id, 
+                        True
+                    )
+                else:
+                    # For other BadRequest errors, try to at least update the caption
+                    try:
+                        await context.bot.edit_message_caption(
+                            chat_id=CHARA_CHANNEL_ID,
+                            message_id=old_message_id,
+                            caption=caption,
+                            parse_mode='HTML'
+                        )
+                        return old_message_id
+                    except:
+                        # If caption update also fails, send new message
+                        return await TelegramUploader.upload_to_channel(
+                            character, 
+                            context, 
+                            character.media_file.catbox_url or character.media_file.telegram_file_id, 
+                            True
+                        )
+                
+        except Exception as e:
+            # If any other error occurs, send new message
+            return await TelegramUploader.upload_to_channel(
+                character, 
+                context, 
+                character.media_file.catbox_url or character.media_file.telegram_file_id, 
+                True
+            )
 
 
 # ===================== COMMAND HANDLERS =====================
