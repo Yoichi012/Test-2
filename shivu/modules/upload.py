@@ -529,7 +529,7 @@ class TelegramUploader:
     async def upload_to_channel(
         character: Character,
         context: ContextTypes.DEFAULT_TYPE,
-        telegram_file_id: str,  # Add this parameter
+        telegram_file_id: str,
         is_update: bool = False
     ) -> Optional[int]:
         """Upload character to channel using file_id for instant posting"""
@@ -598,44 +598,6 @@ class TelegramUploader:
                     True
                 )
             raise
-
-
-# ===================== PARALLEL UPLOAD MANAGER =====================
-
-class ParallelUploadManager:
-    """Manages parallel uploads to Catbox and Telegram"""
-    
-    @staticmethod
-    async def parallel_upload_and_post(
-        media_file: MediaFile,
-        character: Character,
-        context: ContextTypes.DEFAULT_TYPE,
-        is_update: bool = False,
-        old_message_id: Optional[int] = None
-    ) -> Tuple[Optional[str], Optional[int]]:
-        """Upload to Catbox and post to Telegram channel in parallel"""
-        
-        # Define upload tasks
-        catbox_task = asyncio.create_task(
-            CatboxUploader.upload(media_file.file_path, media_file.filename)
-        )
-        
-        # Post to channel using file_id immediately
-        channel_task = asyncio.create_task(
-            TelegramUploader.upload_to_channel(
-                character, 
-                context, 
-                media_file.telegram_file_id, 
-                is_update
-            ) if not is_update else asyncio.create_task(
-                TelegramUploader.update_channel_message(character, context, old_message_id)
-            )
-        )
-        
-        # Wait for both tasks to complete
-        catbox_url, message_id = await asyncio.gather(catbox_task, channel_task)
-        
-        return catbox_url, message_id
 
 
 # ===================== COMMAND HANDLERS =====================
@@ -752,11 +714,18 @@ class UploadHandler:
                 update.effective_user.first_name
             )
             
-            # PARALLEL EXECUTION: Upload to Catbox and post to channel simultaneously
+            # FIXED: Use coroutines directly with asyncio.gather instead of creating tasks first
             await processing_msg.edit_text("🔄 **Uploading to Catbox and posting to channel...**")
             
-            catbox_url, message_id = await ParallelUploadManager.parallel_upload_and_post(
-                media_file, character, context, is_update=False
+            # Run both operations concurrently using gather with coroutines
+            catbox_url, message_id = await asyncio.gather(
+                CatboxUploader.upload(media_file.file_path, media_file.filename),
+                TelegramUploader.upload_to_channel(
+                    character, 
+                    context, 
+                    media_file.telegram_file_id, 
+                    is_update=False
+                )
             )
             
             if not catbox_url:
@@ -930,15 +899,17 @@ class UpdateHandler:
                         uploader_name=update.effective_user.first_name
                     )
                     
-                    # PARALLEL EXECUTION for update
+                    # FIXED: Use coroutines directly with asyncio.gather
                     await processing_msg.edit_text("🔄 **Uploading new image and updating channel...**")
                     
-                    catbox_url, new_message_id = await ParallelUploadManager.parallel_upload_and_post(
-                        media_file, 
-                        char_for_upload, 
-                        context, 
-                        is_update=True,
-                        old_message_id=character.get('message_id')
+                    # Run both operations concurrently
+                    catbox_url, new_message_id = await asyncio.gather(
+                        CatboxUploader.upload(media_file.file_path, media_file.filename),
+                        TelegramUploader.update_channel_message(
+                            char_for_upload, 
+                            context, 
+                            character.get('message_id')
+                        )
                     )
                     
                     if not catbox_url:
