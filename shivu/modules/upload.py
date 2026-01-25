@@ -1727,7 +1727,7 @@ if __name__ == "__main__":
 - `CommandHandlers` validates before processing
 
 ### ✅ **Atomic Guarantees Preserved**
-- Catbox failure → No Telegram upload → No database entry
+# - Catbox failure → No Telegram upload → No database entry
 - Database failure → Telegram message deleted
 - All rollbacks working correctly
 
