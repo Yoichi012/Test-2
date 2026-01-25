@@ -8,7 +8,6 @@ from html import escape
 from typing import Dict, Any, Optional, List
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
-# CommandHandler se 'fav' hatane ke liye isse import rakha hai
 from telegram.ext import CommandHandler, MessageHandler, filters, ContextTypes
 
 from shivu import (
