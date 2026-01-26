@@ -5,7 +5,7 @@ import html
 from telegram import Update
 from telegram.ext import CommandHandler, CallbackContext
 
-from shivu import (application, PHOTO_URL, OWNER_ID,
+from shivu import (application, VIDEO_URL, OWNER_ID,
                     user_collection, top_global_groups_collection, top_global_groups_collection, 
                     group_user_totals_collection)
 
@@ -32,9 +32,9 @@ async def global_leaderboard(update: Update, context: CallbackContext) -> None:
         leaderboard_message += f'{i}. <b>{group_name}</b> ➾ <b>{count}</b>\n'
 
 
-    photo_url = random.choice(PHOTO_URL)
+    video_url = random.choice(VIDEO_URL)
 
-    await update.message.reply_photo(photo=photo_url, caption=leaderboard_message, parse_mode='HTML')
+    await update.message.reply_video(video=video_url, caption=leaderboard_message, parse_mode='HTML')
 
 async def ctop(update: Update, context: CallbackContext) -> None:
     chat_id = update.effective_chat.id
@@ -58,9 +58,9 @@ async def ctop(update: Update, context: CallbackContext) -> None:
         character_count = user['character_count']
         leaderboard_message += f'{i}. <a href="https://t.me/{username}"><b>{first_name}</b></a> ➾ <b>{character_count}</b>\n'
 
-    photo_url = random.choice(PHOTO_URL)
+    video_url = random.choice(VIDEO_URL)
 
-    await update.message.reply_photo(photo=photo_url, caption=leaderboard_message, parse_mode='HTML')
+    await update.message.reply_video(video=video_url, caption=leaderboard_message, parse_mode='HTML')
 
 
 async def leaderboard(update: Update, context: CallbackContext) -> None:
@@ -83,9 +83,9 @@ async def leaderboard(update: Update, context: CallbackContext) -> None:
         character_count = user['character_count']
         leaderboard_message += f'{i}. <a href="https://t.me/{username}"><b>{first_name}</b></a> ➾ <b>{character_count}</b>\n'
 
-    photo_url = random.choice(PHOTO_URL)
+    video_url = random.choice(VIDEO_URL)
 
-    await update.message.reply_photo(photo=photo_url, caption=leaderboard_message, parse_mode='HTML')
+    await update.message.reply_video(video=video_url, caption=leaderboard_message, parse_mode='HTML')
 
 
 
