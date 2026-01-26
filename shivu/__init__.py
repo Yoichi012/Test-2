@@ -60,6 +60,7 @@ user_collection = db["user_collection_lmaoooo"]
 group_user_totals_collection = db["group_user_totalsssssss"]
 top_global_groups_collection = db["top_global_groups"]
 pm_users = db["total_pm_users"]
+user_balance_coll = db['user_balance']
 
 # ---------------- BACKGROUND TASK HELPER ---------------- #
 
@@ -92,4 +93,5 @@ __all__ = [
     "CHARA_CHANNEL_ID",
     "SUPPORT_CHAT",
     "SUDO_USERS",
+    "user_balance_coll",
 ]
