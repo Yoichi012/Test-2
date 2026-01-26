@@ -9,6 +9,39 @@ import asyncio
 from shivu import collection, user_collection, application
 
 
+# Small Caps Conversion Utility
+def to_small_caps(text: str) -> str:
+    """Convert standard text to Small Caps font."""
+    small_caps_mapping = {
+        'a': 'ᴀ', 'b': 'ʙ', 'c': 'ᴄ', 'd': 'ᴅ', 'e': 'ᴇ',
+        'f': 'ꜰ', 'g': 'ɢ', 'h': 'ʜ', 'i': 'ɪ', 'j': 'ᴊ',
+        'k': 'ᴋ', 'l': 'ʟ', 'm': 'ᴍ', 'n': 'ɴ', 'o': 'ᴏ',
+        'p': 'ᴘ', 'q': 'ǫ', 'r': 'ʀ', 's': 's', 't': 'ᴛ',
+        'u': 'ᴜ', 'v': 'ᴠ', 'w': 'ᴡ', 'x': 'x', 'y': 'ʏ',
+        'z': 'ᴢ',
+        'A': 'ᴀ', 'B': 'ʙ', 'C': 'ᴄ', 'D': 'ᴅ', 'E': 'ᴇ',
+        'F': 'ꜰ', 'G': 'ɢ', 'H': 'ʜ', 'I': 'ɪ', 'J': 'ᴊ',
+        'K': 'ᴋ', 'L': 'ʟ', 'M': 'ᴍ', 'N': 'ɴ', 'O': 'ᴏ',
+        'P': 'ᴘ', 'Q': 'ǫ', 'R': 'ʀ', 'S': 's', 'T': 'ᴛ',
+        'U': 'ᴜ', 'V': 'ᴠ', 'W': 'ᴡ', 'X': 'x', 'Y': 'ʏ',
+        'Z': 'ᴢ',
+        ' ': ' ', '-': '-', '/': '/', '(': '(', ')': ')',
+        '[': '[', ']': ']', '{': '{', '}': '}',
+        '0': '0', '1': '1', '2': '2', '3': '3', '4': '4',
+        '5': '5', '6': '6', '7': '7', '8': '8', '9': '9'
+    }
+    
+    return ''.join(small_caps_mapping.get(char, char) for char in str(text))
+
+
+# Rarity Emoji Mapping
+RARITY_EMOJIS = {
+    1: '⚪', 2: '🔵', 3: '🟡', 4: '💮', 5: '👹',
+    6: '🎐', 7: '🔮', 8: '🪐', 9: '⚰️', 10: '🌬️',
+    11: '💝', 12: '🌸', 13: '🏖️', 14: '🍭', 15: '🧬'
+}
+
+
 class HaremManager:
     """Manages harem data and operations efficiently."""
 
@@ -20,34 +53,34 @@ class HaremManager:
         """
         # Fetch user document directly
         user = await user_collection.find_one({'id': user_id})
-        
+
         if not user:
             return None, None
-        
+
         # Get user's characters array
         characters = user.get('characters', [])
-        
+
         if not characters:
             return user, []
-        
+
         # Get unique character IDs from user's collection
         character_ids = [char.get('id') for char in characters if char.get('id')]
-        
+
         if not character_ids:
             return user, []
-        
+
         # Fetch valid characters from main collection in batch
         valid_characters = []
         async for char in collection.find({'id': {'$in': character_ids}}):
             valid_characters.append(char)
-        
+
         # Create mapping of character ID to character data
         valid_char_map = {char['id']: char for char in valid_characters}
-        
+
         # Count duplicates in user's collection
         char_counts = {}
         user_valid_characters = []
-        
+
         for user_char in characters:
             char_id = user_char.get('id')
             if char_id and char_id in valid_char_map:
@@ -55,10 +88,10 @@ class HaremManager:
                 char_data = valid_char_map[char_id].copy()
                 char_counts[char_id] = char_counts.get(char_id, 0) + 1
                 user_valid_characters.append(char_data)
-        
+
         # Sort characters by anime and id
         user_valid_characters = sorted(user_valid_characters, key=lambda x: (x.get('anime', ''), x.get('id', '')))
-        
+
         return user, user_valid_characters
 
     @staticmethod
@@ -131,7 +164,7 @@ async def harem(update: Update, context: CallbackContext, page: int = 0) -> None
         else:
             await update.callback_query.edit_message_text(message)
         return
-    
+
     if not characters:
         message = 'You Have Not Guessed any Characters Yet..'
         if update.message:
@@ -158,31 +191,46 @@ async def harem(update: Update, context: CallbackContext, page: int = 0) -> None
     page_animes = list({char['anime'] for char in current_chars})
     anime_counts = await HaremManager.get_anime_counts(page_animes)
 
-    # Build message
+    # Build message with Small Caps formatting
     safe_name = escape(str(update.effective_user.first_name))
-    harem_message = f"<b>{safe_name}'s Harem - Page {page + 1}/{total_pages}</b>\n"
+    
+    # Header in Small Caps
+    header_text = to_small_caps(f"{safe_name}'S HAREM - PAGE {page + 1}/{total_pages}")
+    harem_message = f"<b>{header_text}</b>\n\n"
 
     # Group characters by anime for display
     current_chars.sort(key=lambda x: x['anime'])
     grouped_chars = {k: list(v) for k, v in groupby(current_chars, key=lambda x: x['anime'])}
 
     for anime, chars in grouped_chars.items():
-        # Safe escaping
+        # Safe escaping and Small Caps conversion
         safe_anime = escape(str(anime))
+        anime_small_caps = to_small_caps(safe_anime)
         total_anime_chars = anime_counts.get(anime, 0)
-
-        harem_message += f'\n<b>{safe_anime} {len(chars)}/{total_anime_chars}</b>\n'
-
+        
+        # Anime header with Small Caps
+        harem_message += f"<b>𖤍 {anime_small_caps} {{{len(chars)}/{total_anime_chars}}}</b>\n"
+        harem_message += f"--------------------\n"
+        
         for char in chars:
             safe_char_name = escape(str(char['name']))
+            char_small_caps = to_small_caps(safe_char_name)
             count = char_counts[char['id']]
-            harem_message += f'{char["id"]} {safe_char_name} ×{count}\n'
+            
+            # Get rarity emoji
+            rarity_level = char.get('rarity', 1)
+            rarity_emoji = RARITY_EMOJIS.get(rarity_level, '⚪')
+            
+            # Character line with Small Caps
+            harem_message += f"✶ {char['id']} [ {rarity_emoji} ] {char_small_caps} x{count}\n"
+        
+        harem_message += f"--------------------\n\n"
 
     # Build keyboard
     total_count = len(characters)
     keyboard = [[
         InlineKeyboardButton(
-            f"See Collection ({total_count})", 
+            to_small_caps(f"See Collection ({total_count})"), 
             switch_inline_query_current_chat=f"collection.{user_id}"
         )
     ]]
