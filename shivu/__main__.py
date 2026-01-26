@@ -267,7 +267,7 @@ async def send_image(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
     rarity_display = get_rarity_display(character)
     caption = to_small_caps(
         f"A new {escape(rarity_display)} character appeared!\n"
-        f"Guess the character name with /guess <name> to add them to your harem."
+        f"✨ Guess the character name with /guess <name> to add them to your harem."
     )
 
     try:
