@@ -237,22 +237,37 @@ async def guess(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if sorted(name_parts) == sorted(guess_text.split()) or any(part == guess_text for part in name_parts):
         first_correct_guesses[chat_id] = user_id
         await _update_user_info(user_id, update.effective_user)
-        await user_collection.update_one({'id': user_id}, {'$addToSet': {'characters': character}})
+        
+        # --- 🔥 FIX START: Database Saving Logic 🔥 ---
+        # 1. Create a copy so we don't mess up the original object
+        character_data = character.copy()
+        
+        # 2. Remove the '_id' field if it exists (This solves the saving error)
+        if '_id' in character_data:
+            del character_data['_id']
+            
+        # 3. Save the clean copy to the user's collection
+        await user_collection.update_one(
+            {'id': user_id}, 
+            {'$addToSet': {'characters': character_data}}
+        )
+        # --- 🔥 FIX END 🔥 ---
+
         await _update_group_user_totals(user_id, chat_id, update.effective_user)
         await _update_top_global_groups(chat_id, update.effective_chat.title)
 
         keyboard = InlineKeyboardMarkup([[InlineKeyboardButton("See Harem", switch_inline_query_current_chat=f"collection.{user_id}")]])
-        
+
         safe_name = escape(str(update.effective_user.first_name or ""))
-        
+
         # 🔥 FIX: Mapping Logic for Guess Reply
         try:
             raw_rarity = int(character.get('rarity'))
         except (ValueError, TypeError):
             raw_rarity = 'Unknown'
-            
+
         rarity_text = RARITY_MAP.get(raw_rarity, str(raw_rarity))
-        
+
         char_name = escape(str(character.get("name", "Unknown")))
 
         reply_text = (
