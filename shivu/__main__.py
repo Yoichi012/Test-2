@@ -139,7 +139,11 @@ async def message_counter(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
                 if last_time and (time.time() - last_time) < SPAM_IGNORE_SECONDS:
                     return
                 try:
-                    await update.message.reply_text(f"⚠️ Don't spam, {escape(update.effective_user.first_name)}.")
+                    # UPDATED SPAM MESSAGE HERE
+                    user_first_name = str(update.effective_user.first_name)
+                    await update.message.reply_text(
+                        f"⚠️ Don't spam, {escape(user_first_name)}. Your messages will be ignored for 10 minutes."
+                    )
                 except Exception:
                     pass
                 warned_users[user_id] = time.time()
@@ -175,8 +179,11 @@ async def send_image(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
     last_characters[chat_id] = character
     first_correct_guesses.pop(chat_id, None)
 
+    # FIXED: Added str() to prevent 'int' object has no attribute 'replace'
+    rarity_text = str(character.get('rarity', 'Unknown'))
+    
     caption = (
-        f"A new {escape(character.get('rarity', 'Unknown'))} character appeared!\n"
+        f"A new {escape(rarity_text)} character appeared!\n"
         f"Guess the character name with /guess <name> to add them to your harem."
     )
 
@@ -211,11 +218,16 @@ async def guess(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         await _update_top_global_groups(chat_id, update.effective_chat.title)
 
         keyboard = InlineKeyboardMarkup([[InlineKeyboardButton("See Harem", switch_inline_query_current_chat=f"collection.{user_id}")]])
-        safe_name = escape(update.effective_user.first_name or "")
+        
+        # FIXED: Added str() everywhere to be safe
+        safe_name = escape(str(update.effective_user.first_name or ""))
+        char_name = escape(str(character.get("name", "Unknown")))
+        char_rarity = escape(str(character.get("rarity", "Unknown")))
+
         reply_text = (
             f'<b><a href="tg://user?id={user_id}">{safe_name}</a></b> you guessed a new character ✅\n\n'
-            f'NAME: <b>{escape(character.get("name", "Unknown"))}</b>\n'
-            f'RARITY: <b>{escape(character.get("rarity", "Unknown"))}</b>'
+            f'NAME: <b>{char_name}</b>\n'
+            f'RARITY: <b>{char_rarity}</b>'
         )
         await update.message.reply_text(reply_text, reply_markup=keyboard, parse_mode='HTML')
     else:
