@@ -62,6 +62,19 @@ top_global_groups_collection = db["top_global_groups"]
 pm_users = db["total_pm_users"]
 user_balance_coll = db['user_balance']
 
+# ---------------- DATABASE FUNCTIONS ---------------- #
+
+async def change_balance(user_id: int, amount: int):
+    """
+    Update user's balance by a specified amount (can be positive or negative).
+    Creates the user document if it doesn't exist.
+    """
+    await user_balance_coll.update_one(
+        {'user_id': user_id},
+        {'$inc': {'balance': amount}},
+        upsert=True
+    )
+
 # ---------------- BACKGROUND TASK HELPER ---------------- #
 
 def create_background_task(coro):
@@ -94,4 +107,5 @@ __all__ = [
     "SUPPORT_CHAT",
     "SUDO_USERS",
     "user_balance_coll",
+    "change_balance",
 ]
