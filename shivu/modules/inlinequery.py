@@ -1,12 +1,23 @@
 import re
 import time
-from html import escape
+from html import escape as html_escape
 from typing import List, Dict, Any, Optional
 from cachetools import TTLCache
 from pymongo import ASCENDING
 from telegram import Update, InlineQueryResultPhoto
 from telegram.ext import InlineQueryHandler, CallbackContext
 from shivu import user_collection, collection, application, db
+
+
+def safe_escape(value: Any, default: str = "") -> str:
+    """
+    Safely escape any value for HTML.
+    Converts integers to strings, handles None values.
+    """
+    if value is None:
+        value = default
+    # Convert to string regardless of type
+    return html_escape(str(value))
 
 
 # Create indexes for optimal query performance
@@ -314,12 +325,12 @@ async def inlinequery(update: Update, context: CallbackContext) -> None:
             # Build results
             current_time = time.time()
             for character in characters:
-                # Escape all user-provided text for HTML safety
+                # Escape all user-provided text for HTML safety using safe_escape
                 user_data = user_collection_cache.get(cache_key, {})
-                user_name = escape(user_data.get('first_name', str(user_id)))
-                char_name = escape(character.get('name', ''))
-                char_anime = escape(character.get('anime', ''))
-                char_rarity = escape(character.get('rarity', ''))
+                user_name = safe_escape(user_data.get('first_name', str(user_id)))
+                char_name = safe_escape(character.get('name', ''))
+                char_anime = safe_escape(character.get('anime', ''))
+                char_rarity = safe_escape(character.get('rarity', ''))
                 
                 caption = (
                     f"<b> Look At <a href='tg://user?id={user_id}'>{user_name}</a>'s Character</b>\n\n"
@@ -362,10 +373,10 @@ async def inlinequery(update: Update, context: CallbackContext) -> None:
         # Build results
         current_time = time.time()
         for character in aggregated_results:
-            # Escape all character data for HTML safety
-            char_name = escape(character.get('name', ''))
-            char_anime = escape(character.get('anime', ''))
-            char_rarity = escape(character.get('rarity', ''))
+            # Escape all character data for HTML safety using safe_escape
+            char_name = safe_escape(character.get('name', ''))
+            char_anime = safe_escape(character.get('anime', ''))
+            char_rarity = safe_escape(character.get('rarity', ''))
             
             caption = (
                 f"<b>Look At This Character !!</b>\n\n"
