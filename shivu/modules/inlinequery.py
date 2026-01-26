@@ -4,115 +4,99 @@ from html import escape
 from cachetools import TTLCache
 from pymongo import ASCENDING
 
-from telegram import Update, InlineQueryResultPhoto, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import InlineQueryHandler, CallbackContext
+from telegram import Update, InlineQueryResultPhoto
+from telegram.ext import InlineQueryHandler, CallbackContext 
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
 from shivu import user_collection, collection, application, db
 
-# --- Database Indexing ---
-def setup_indexes():
-    db.characters.create_index([('id', ASCENDING)])
-    db.characters.create_index([('anime', ASCENDING)])
-    db.characters.create_index([('img_url', ASCENDING)])
+# --- Indexing ---
+db.characters.create_index([('id', ASCENDING)])
+db.characters.create_index([('anime', ASCENDING)])
+db.characters.create_index([('img_url', ASCENDING)])
 
-    db.user_collection.create_index([('characters.id', ASCENDING)])
-    db.user_collection.create_index([('characters.name', ASCENDING)])
-    db.user_collection.create_index([('characters.img_url', ASCENDING)])
+db.user_collection.create_index([('characters.id', ASCENDING)])
+db.user_collection.create_index([('characters.name', ASCENDING)])
+db.user_collection.create_index([('characters.img_url', ASCENDING)])
 
-setup_indexes()
-
-# --- Caching ---
-all_characters_cache = TTLCache(maxsize=10000, ttl=36000)
-user_collection_cache = TTLCache(maxsize=10000, ttl=60)
+# --- Cache Fixing ---
+# Global cache ko 10 ghante se ghata kar 2 minute (120s) kar diya taaki deleted characters jaldi update hon
+all_characters_cache = TTLCache(maxsize=10000, ttl=120)
+# User cache ko 5 second kar diya taaki collection update turant dikhe
+user_collection_cache = TTLCache(maxsize=10000, ttl=5)
 
 async def inlinequery(update: Update, context: CallbackContext) -> None:
     query = update.inline_query.query
     offset = int(update.inline_query.offset) if update.inline_query.offset else 0
-    limit = 50
 
-    all_characters = []
-    user = None
-
-    # 1. Logic for 'collection.user_id'
     if query.startswith('collection.'):
-        parts = query.split(' ')
-        meta_data = parts[0].split('.')
-        user_id_str = meta_data[1] if len(meta_data) > 1 else ""
-        search_terms = ' '.join(parts[1:])
-
+        user_id_str = query.split(' ')[0].split('.')[1]
+        search_terms = ' '.join(query.split(' ')[1:])
+        
         if user_id_str.isdigit():
             user_id = int(user_id_str)
-            # Cache check
-            user = user_collection_cache.get(user_id_str)
-            if not user:
+            # Fresh check in cache
+            if user_id_str in user_collection_cache:
+                user = user_collection_cache[user_id_str]
+            else:
                 user = await user_collection.find_one({'id': user_id})
                 if user:
                     user_collection_cache[user_id_str] = user
 
             if user and 'characters' in user:
-                # Get unique characters based on ID
-                unique_chars = {v['id']: v for v in user['characters']}.values()
-                all_characters = list(unique_chars)
-                
+                # Sirf unique ids nikalna
+                all_characters = list({v['id']:v for v in user['characters']}.values())
                 if search_terms:
-                    regex = re.compile(search_terms, re.IGNORECASE)
-                    all_characters = [c for c in all_characters if regex.search(c['name']) or regex.search(c['anime'])]
-    
-    # 2. Global Search Logic
+                    # re.escape use kiya taaki special characters search crash na karein
+                    regex = re.compile(re.escape(search_terms), re.IGNORECASE)
+                    all_characters = [character for character in all_characters if regex.search(character['name']) or regex.search(character['anime'])]
+            else:
+                all_characters = []
+        else:
+            all_characters = []
     else:
         if query:
-            regex = re.compile(query, re.IGNORECASE)
-            all_characters = await collection.find({
-                "$or": [{"name": regex}, {"anime": regex}]
-            }).to_list(length=None)
+            regex = re.compile(re.escape(query), re.IGNORECASE)
+            all_characters = list(await collection.find({"$or": [{"name": regex}, {"anime": regex}]}).to_list(length=None))
         else:
             if 'all_characters' in all_characters_cache:
                 all_characters = all_characters_cache['all_characters']
             else:
-                all_characters = await collection.find({}).to_list(length=None)
+                all_characters = list(await collection.find({}).to_list(length=None))
                 all_characters_cache['all_characters'] = all_characters
 
-    # --- Pagination ---
-    characters_slice = all_characters[offset : offset + limit]
-    next_offset = str(offset + limit) if len(all_characters) > offset + limit else ""
+    # Pagination Logic
+    characters = all_characters[offset:offset+50]
+    next_offset = str(offset + 50) if len(all_characters) > offset + 50 else ""
 
     results = []
-    for character in characters_slice:
-        # Note: These DB hits inside loop are heavy, but kept as per your logic
+    for character in characters:
+        # Extra safety: Check if character still exists in global DB
+        db_char = await collection.find_one({'id': character['id']})
+        if not db_char:
+            continue
+
         global_count = await user_collection.count_documents({'characters.id': character['id']})
-        anime_characters_total = await collection.count_documents({'anime': character['anime']})
+        anime_characters = await collection.count_documents({'anime': character['anime']})
 
-        if query.startswith('collection.') and user:
-            user_char_count = sum(1 for c in user['characters'] if c['id'] == character['id'])
-            user_anime_count = sum(1 for c in user['characters'] if c['anime'] == character['anime'])
-            
-            caption = (
-                f"<b> Look At <a href='tg://user?id={user['id']}'>{escape(user.get('first_name', str(user['id'])))}</a>'s Character</b>\n\n"
-                f"🌸: <b>{character['name']} (x{user_char_count})</b>\n"
-                f"🏖️: <b>{character['anime']} ({user_anime_count}/{anime_characters_total})</b>\n"
-                f"<b>{character.get('rarity', 'Unknown')}</b>\n\n"
-                f"<b>🆔️:</b> {character['id']}"
-            )
+        if query.startswith('collection.'):
+            user_character_count = sum(1 for c in user['characters'] if c['id'] == character['id'])
+            user_anime_characters = sum(1 for c in user['characters'] if c['anime'] == character['anime'])
+            caption = f"<b> Look At <a href='tg://user?id={user['id']}'>{(escape(user.get('first_name', str(user['id']))))}</a>'s Character</b>\n\n🌸: <b>{character['name']} (x{user_character_count})</b>\n🏖️: <b>{character['anime']} ({user_anime_characters}/{anime_characters})</b>\n<b>{character.get('rarity', 'N/A')}</b>\n\n<b>🆔️:</b> {character['id']}"
         else:
-            caption = (
-                f"<b>Look At This Character !!</b>\n\n"
-                f"🌸: <b>{character['name']}</b>\n"
-                f"🏖️: <b>{character['anime']}</b>\n"
-                f"<b>{character.get('rarity', 'Unknown')}</b>\n"
-                f"🆔️: <b>{character['id']}</b>\n\n"
-                f"<b>Globally Guessed {global_count} Times...</b>"
-            )
-
+            caption = f"<b>Look At This Character !!</b>\n\n🌸:<b> {character['name']}</b>\n🏖️: <b>{character['anime']}</b>\n<b>{character.get('rarity', 'N/A')}</b>\n🆔️: <b>{character['id']}</b>\n\n<b>Globally Guessed {global_count} Times...</b>"
+        
         results.append(
             InlineQueryResultPhoto(
+                thumbnail_url=character['img_url'],
                 id=f"{character['id']}_{time.time()}",
                 photo_url=character['img_url'],
-                thumbnail_url=character['img_url'],
                 caption=caption,
                 parse_mode='HTML'
             )
         )
 
-    await update.inline_query.answer(results, next_offset=next_offset, cache_time=5)
+    # cache_time=0 set kiya hai taaki Telegram purane results store na kare
+    await update.inline_query.answer(results, next_offset=next_offset, cache_time=0)
 
 application.add_handler(InlineQueryHandler(inlinequery, block=False))
