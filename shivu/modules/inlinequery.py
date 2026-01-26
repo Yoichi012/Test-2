@@ -10,6 +10,21 @@ from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
 from shivu import user_collection, collection, application, db
 
+# --- Small Caps Helper Function ---
+def to_small_caps(text):
+    """Convert any string to Unicode Small Caps"""
+    small_caps_map = {
+        'A': 'ᴀ', 'B': 'ʙ', 'C': 'ᴄ', 'D': 'ᴅ', 'E': 'ᴇ', 'F': 'ꜰ', 'G': 'ɢ', 'H': 'ʜ',
+        'I': 'ɪ', 'J': 'ᴊ', 'K': 'ᴋ', 'L': 'ʟ', 'M': 'ᴍ', 'N': 'ɴ', 'O': 'ᴏ', 'P': 'ᴘ',
+        'Q': 'ǫ', 'R': 'ʀ', 'S': 'ꜱ', 'T': 'ᴛ', 'U': 'ᴜ', 'V': 'ᴠ', 'W': 'ᴡ', 'X': 'x',
+        'Y': 'ʏ', 'Z': 'ᴢ',
+        'a': 'ᴀ', 'b': 'ʙ', 'c': 'ᴄ', 'd': 'ᴅ', 'e': 'ᴇ', 'f': 'ꜰ', 'g': 'ɢ', 'h': 'ʜ',
+        'i': 'ɪ', 'j': 'ᴊ', 'k': 'ᴋ', 'l': 'ʟ', 'm': 'ᴍ', 'n': 'ɴ', 'o': 'ᴏ', 'p': 'ᴘ',
+        'q': 'ǫ', 'r': 'ʀ', 's': 'ꜱ', 't': 'ᴛ', 'u': 'ᴜ', 'v': 'ᴠ', 'w': 'ᴡ', 'x': 'x',
+        'y': 'ʏ', 'z': 'ᴢ'
+    }
+    return ''.join(small_caps_map.get(ch, ch) for ch in text)
+
 # --- Indexing ---
 db.characters.create_index([('id', ASCENDING)])
 db.characters.create_index([('anime', ASCENDING)])
@@ -32,7 +47,7 @@ async def inlinequery(update: Update, context: CallbackContext) -> None:
     if query.startswith('collection.'):
         user_id_str = query.split(' ')[0].split('.')[1]
         search_terms = ' '.join(query.split(' ')[1:])
-        
+
         if user_id_str.isdigit():
             user_id = int(user_id_str)
             # Fresh check in cache
@@ -78,14 +93,34 @@ async def inlinequery(update: Update, context: CallbackContext) -> None:
 
         global_count = await user_collection.count_documents({'characters.id': character['id']})
         anime_characters = await collection.count_documents({'anime': character['anime']})
+        
+        # Rarity processing - emoji aur name dono ke liye
+        rarity_field = character.get('rarity', 'N/A')
+        # Agar rarity string mein emoji hai to separate karo
+        rarity_parts = rarity_field.split(' ', 1) if ' ' in rarity_field else (rarity_field, '')
+        rarity_emoji = rarity_parts[0] if rarity_parts else 'N/A'
+        rarity_name = rarity_parts[1] if len(rarity_parts) > 1 else rarity_parts[0]
 
         if query.startswith('collection.'):
             user_character_count = sum(1 for c in user['characters'] if c['id'] == character['id'])
             user_anime_characters = sum(1 for c in user['characters'] if c['anime'] == character['anime'])
-            caption = f"<b> Look At <a href='tg://user?id={user['id']}'>{(escape(user.get('first_name', str(user['id']))))}</a>'s Character</b>\n\n🌸: <b>{character['name']} (x{user_character_count})</b>\n🏖️: <b>{character['anime']} ({user_anime_characters}/{anime_characters})</b>\n<b>{character.get('rarity', 'N/A')}</b>\n\n<b>🆔️:</b> {character['id']}"
+            
+            # User name ko bhi small caps mein convert karo
+            user_first_name = user.get('first_name', str(user['id']))
+            
+            caption = f"✨ {to_small_caps('look at')} {to_small_caps(user_first_name)}'s {to_small_caps('character')}\n\n"
+            caption += f"🌸{to_small_caps('name')} : <b>{to_small_caps(character['name'])} (x{user_character_count})</b>\n"
+            caption += f"🏖️{to_small_caps('anime')} : <b>{to_small_caps(character['anime'])} ({user_anime_characters}/{anime_characters})</b>\n"
+            caption += f"🏵️ {to_small_caps('rarity')} : <b>{rarity_emoji} {to_small_caps(rarity_name)}</b>\n"
+            caption += f"🆔️ {to_small_caps('id')} : <b>{character['id']}</b>"
         else:
-            caption = f"<b>Look At This Character !!</b>\n\n🌸:<b> {character['name']}</b>\n🏖️: <b>{character['anime']}</b>\n<b>{character.get('rarity', 'N/A')}</b>\n🆔️: <b>{character['id']}</b>\n\n<b>Globally Guessed {global_count} Times...</b>"
-        
+            caption = f"✨ {to_small_caps('look at this character !!')}\n\n"
+            caption += f"🌸{to_small_caps('name')} : <b>{to_small_caps(character['name'])}</b>\n"
+            caption += f"🏖️{to_small_caps('anime')} : <b>{to_small_caps(character['anime'])}</b>\n"
+            caption += f"🏵️ {to_small_caps('rarity')} : <b>{rarity_emoji} {to_small_caps(rarity_name)}</b>\n"
+            caption += f"🆔️ {to_small_caps('id')} : <b>{character['id']}</b>\n\n"
+            caption += f"{to_small_caps('globally guessed')} {global_count} {to_small_caps('times...')}"
+
         results.append(
             InlineQueryResultPhoto(
                 thumbnail_url=character['img_url'],
