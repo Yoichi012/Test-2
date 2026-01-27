@@ -408,11 +408,12 @@ async def guess(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
                                        f"🆔 ɪᴅ: {character_id}\n\n"
                                        f"✅ ꜱᴜᴄᴄᴇꜱꜱ ꜰᴜʟʟ ᴀᴅᴅ ʜᴀʀᴇᴍ.")
 
-        # keyboard that shows inline query for the user's collection in this chat
+        # FIXED: keyboard that shows inline query for the user's collection
+        # Changed from "collection.{user_id}" to just "{user_id}" to match your inline query handler
         keyboard = InlineKeyboardMarkup(
             [[InlineKeyboardButton(
-                "ꜱᴇᴇ ʜᴀʀᴇᴍ",  # Button text already in small caps
-                switch_inline_query_current_chat=f"collection.{user_id}"
+                "ꜱᴇᴇ ʜᴀʀᴇᴍ",
+                switch_inline_query_current_chat=str(user_id)
             )]]
         )
 
@@ -473,33 +474,12 @@ async def fav(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         LOGGER.exception("Failed to set favorite character")
         await update.message.reply_text(to_small_caps("Failed to mark favorite. Please try again later."))
 
-async def balance_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Handle /balance command to check user's coin balance."""
-    if not update.effective_user:
-        return
-
-    user_id = update.effective_user.id
-
-    try:
-        # Get user's balance from database
-        user_data = await user_collection.find_one({'id': user_id})
-        if user_data:
-            balance = user_data.get('balance', 0)
-            balance_msg = to_small_caps(f"💰 ʏᴏᴜʀ ᴄᴜʀʀᴇɴᴛ ʙᴀʟᴀɴᴄᴇ: {balance} ᴄᴏɪɴꜱ")
-            await update.message.reply_text(balance_msg)
-        else:
-            await update.message.reply_text(to_small_caps("You don't have a balance yet. Start guessing characters to earn coins!"))
-    except Exception as e:
-        LOGGER.exception(f"Failed to fetch balance: {e}")
-        await update.message.reply_text(to_small_caps("Failed to fetch your balance. Please try again later."))
-
 def main() -> None:
     """Run the bot - register handlers and start polling."""
     # Register commands
     # Keep block=False to allow concurrency where Application was created with appropriate executor
     application.add_handler(CommandHandler(["guess", "protecc", "collect", "grab", "hunt"], guess, block=False))
     application.add_handler(CommandHandler("fav", fav, block=False))
-    application.add_handler(CommandHandler("balance", balance_command, block=False))
     application.add_handler(MessageHandler(filters.ALL, message_counter, block=False))
 
     # Start polling (drop pending updates by default)
