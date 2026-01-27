@@ -353,26 +353,39 @@ async def guess(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         except Exception:
             LOGGER.exception("Failed updating group/global stats")
 
-        # FIX: ADD DAILY GUESS COUNT UPDATES
+        # FIX: ADD DAILY GUESS COUNT UPDATES WITH SAFE DATA PASSING
+        # Update daily user guess count
         try:
+            # Safely handle None values for username and first_name
+            safe_username = update.effective_user.username if update.effective_user.username else ""
+            safe_first_name = update.effective_user.first_name if update.effective_user.first_name else ""
+            
             await update_daily_user_guess(
                 user_id=user_id,
-                username=update.effective_user.username or "",
-                first_name=update.effective_user.first_name or ""
+                username=safe_username,
+                first_name=safe_first_name
             )
+            LOGGER.info(f"Successfully updated daily user guess for user_id={user_id}")
         except Exception as e:
-            LOGGER.exception(f"Failed to update daily user guess count: {e}")
+            LOGGER.exception(f"Failed to update daily user guess count for user_id={user_id}: {e}")
+            # Don't return - allow character collection to continue
 
+        # Update daily group guess count
         try:
+            # Safely handle None value for group_name
+            safe_group_name = update.effective_chat.title if update.effective_chat.title else ""
+            
             await update_daily_group_guess(
                 group_id=chat_id,
-                group_name=update.effective_chat.title or ""
+                group_name=safe_group_name
             )
+            LOGGER.info(f"Successfully updated daily group guess for group_id={chat_id}")
         except Exception as e:
-            LOGGER.exception(f"Failed to update daily group guess count: {e}")
+            LOGGER.exception(f"Failed to update daily group guess count for group_id={chat_id}: {e}")
+            # Don't return - allow character collection to continue
         # END FIX
 
-        # STEP 1: Coin Alert Message (with reaction)
+        # STEP 2: Coin Alert Message (with reaction)
         coin_alert_msg = await update.message.reply_text(
             to_small_caps("✨ ᴄᴏɴɢʀᴀᴛᴜʟᴀᴛɪᴏɴꜱ 🎉  ʏᴏᴜ ɢᴜᴇꜱꜱᴇᴅ ɪᴛ ʀɪɢʜᴛ! ᴀꜱ ᴀ ʀᴇᴡᴀʀᴅ, 100 ᴄᴏɪɴꜱ ʜᴀᴠᴇ ʙᴇᴇɴ ᴀᴅᴅᴇᴅ ᴛᴏ ʏᴏᴜʀ ʙᴀʟᴀɴᴄᴇ.."),
             parse_mode='HTML'
@@ -384,7 +397,7 @@ async def guess(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         except Exception as e:
             LOGGER.exception(f"Failed to set reaction: {e}")
 
-        # STEP 2: Character Reveal Message
+        # STEP 3: Character Reveal Message
         safe_name = escape(update.effective_user.first_name or "")
         character_name = escape(character.get('name', 'Unknown'))
         anime_name = escape(character.get('anime', 'Unknown'))
@@ -491,6 +504,7 @@ def main() -> None:
     # Keep block=False to allow concurrency where Application was created with appropriate executor
     application.add_handler(CommandHandler(["guess", "protecc", "collect", "grab", "hunt"], guess, block=False))
     application.add_handler(CommandHandler("fav", fav, block=False))
+    application.add_handler(CommandHandler("balance", balance_command, block=False))
     application.add_handler(MessageHandler(filters.ALL, message_counter, block=False))
 
     # Start polling (drop pending updates by default)
