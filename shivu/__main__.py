@@ -19,6 +19,8 @@ from shivu import (
     shivuu,
     user_balance_coll,
     change_balance,
+    update_daily_user_guess,  # ADDED IMPORT
+    update_daily_group_guess,  # ADDED IMPORT
 )
 from shivu import application, SUPPORT_CHAT, UPDATE_CHAT, db, LOGGER
 from shivu.modules import ALL_MODULES
@@ -351,6 +353,25 @@ async def guess(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             await _update_top_global_groups(chat_id, update.effective_chat.title)
         except Exception:
             LOGGER.exception("Failed updating group/global stats")
+
+        # FIX: ADD DAILY GUESS COUNT UPDATES
+        try:
+            await update_daily_user_guess(
+                user_id=user_id,
+                username=update.effective_user.username or "",
+                first_name=update.effective_user.first_name or ""
+            )
+        except Exception as e:
+            LOGGER.exception(f"Failed to update daily user guess count: {e}")
+
+        try:
+            await update_daily_group_guess(
+                group_id=chat_id,
+                group_name=update.effective_chat.title or ""
+            )
+        except Exception as e:
+            LOGGER.exception(f"Failed to update daily group guess count: {e}")
+        # END FIX
 
         # STEP 1: Coin Alert Message (with reaction)
         coin_alert_msg = await update.message.reply_text(
