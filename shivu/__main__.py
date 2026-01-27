@@ -19,11 +19,10 @@ from shivu import (
     shivuu,
     user_balance_coll,
     change_balance,
-    update_daily_user_guess,  # ADDED IMPORT
-    update_daily_group_guess,  # ADDED IMPORT
 )
 from shivu import application, SUPPORT_CHAT, UPDATE_CHAT, db, LOGGER
 from shivu.modules import ALL_MODULES
+from shivu.modules.leaderboard import update_daily_user_guess, update_daily_group_guess
 
 # Import all modules declared in ALL_MODULES (same as original behavior)
 for module_name in ALL_MODULES:
