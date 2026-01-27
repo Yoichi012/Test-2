@@ -30,7 +30,7 @@ def to_small_caps(text: str) -> str:
         '0': '0', '1': '1', '2': '2', '3': '3', '4': '4',
         '5': '5', '6': '6', '7': '7', '8': '8', '9': '9'
     }
-    
+
     return ''.join(small_caps_mapping.get(char, char) for char in str(text))
 
 
@@ -41,15 +41,22 @@ RARITY_EMOJIS = {
     11: '💝', 12: '🌸', 13: '🏖️', 14: '🍭', 15: '🧬'
 }
 
+# Rarity Names
+RARITY_NAMES = {
+    1: "Common", 2: "Rare", 3: "Legendary", 4: "Special", 5: "Ancient",
+    6: "Celestial", 7: "Epic", 8: "Cosmic", 9: "Nightmare", 10: "Frostborn",
+    11: "Valentine", 12: "Spring", 13: "Tropical", 14: "Kawaii", 15: "Hybrid"
+}
+
 
 class HaremManager:
     """Manages harem data and operations efficiently."""
 
     @staticmethod
-    async def get_user_data_with_valid_characters(user_id: int) -> Tuple[dict, List[dict]]:
+    async def get_user_data_with_valid_characters(user_id: int, rarity_filter=None) -> Tuple[dict, List[dict]]:
         """
         Fetch user data and characters directly from user_collection.
-        Simplified without complex aggregation pipeline.
+        Now with optional rarity filtering support.
         """
         # Fetch user document directly
         user = await user_collection.find_one({'id': user_id})
@@ -62,6 +69,10 @@ class HaremManager:
 
         if not characters:
             return user, []
+
+        # Apply rarity filter if specified
+        if rarity_filter is not None:
+            characters = [char for char in characters if char.get('rarity') == rarity_filter]
 
         # Get unique character IDs from user's collection
         character_ids = [char.get('id') for char in characters if char.get('id')]
@@ -152,11 +163,21 @@ class HaremManager:
 
 
 async def harem(update: Update, context: CallbackContext, page: int = 0) -> None:
-    """Display user's harem with pagination."""
+    """Display user's harem with pagination and rarity filtering."""
     user_id = update.effective_user.id
 
-    # Get user data with ONLY valid characters (single DB call with $lookup)
-    user, characters = await HaremManager.get_user_data_with_valid_characters(user_id)
+    # Import smode functions
+    try:
+        from shivu.modules.smode import get_user_sort_preference, RARITY_OPTIONS
+        rarity_filter = await get_user_sort_preference(user_id)
+    except ImportError:
+        # If smode module not available, disable filtering
+        rarity_filter = None
+        RARITY_OPTIONS = {}
+
+    # Get user data with ONLY valid characters (with optional rarity filter)
+    user, characters = await HaremManager.get_user_data_with_valid_characters(user_id, rarity_filter)
+    
     if not user:
         message = 'You Have Not Guessed any Characters Yet..'
         if update.message:
@@ -165,8 +186,18 @@ async def harem(update: Update, context: CallbackContext, page: int = 0) -> None
             await update.callback_query.edit_message_text(message)
         return
 
+    # Get total character count (without filter) for display
+    total_user_data = await user_collection.find_one({'id': user_id})
+    total_characters_count = len(total_user_data.get('characters', [])) if total_user_data else 0
+
     if not characters:
-        message = 'You Have Not Guessed any Characters Yet..'
+        # No characters after filtering
+        if rarity_filter is not None:
+            filter_name = RARITY_OPTIONS.get(str(rarity_filter), {}).get('name', 'this rarity')
+            message = f'You Have No Characters of {filter_name}!\n\nUse /smode to change filter or select "All Rarities".'
+        else:
+            message = 'You Have Not Guessed any Characters Yet..'
+        
         if update.message:
             await update.message.reply_text(message)
         else:
@@ -193,10 +224,18 @@ async def harem(update: Update, context: CallbackContext, page: int = 0) -> None
 
     # Build message with Small Caps formatting
     safe_name = escape(str(update.effective_user.first_name))
-    
-    # Header in Small Caps
+
+    # Header in Small Caps with filter info
     header_text = to_small_caps(f"{safe_name}'S HAREM - PAGE {page + 1}/{total_pages}")
-    harem_message = f"<b>{header_text}</b>\n\n"
+    harem_message = f"<b>{header_text}</b>\n"
+    
+    # Add filter info if active
+    if rarity_filter is not None:
+        filter_name = RARITY_OPTIONS.get(str(rarity_filter), {}).get('name', 'Unknown')
+        filter_text = to_small_caps(f"Filter: {filter_name} ({len(characters)}/{total_characters_count})")
+        harem_message += f"<b>🔍 {filter_text}</b>\n"
+    
+    harem_message += "\n"
 
     # Group characters by anime for display
     current_chars.sort(key=lambda x: x['anime'])
@@ -207,23 +246,23 @@ async def harem(update: Update, context: CallbackContext, page: int = 0) -> None
         safe_anime = escape(str(anime))
         anime_small_caps = to_small_caps(safe_anime)
         total_anime_chars = anime_counts.get(anime, 0)
-        
+
         # Anime header with Small Caps
         harem_message += f"<b>𖤍 {anime_small_caps} {{{len(chars)}/{total_anime_chars}}}</b>\n"
         harem_message += f"--------------------\n"
-        
+
         for char in chars:
             safe_char_name = escape(str(char['name']))
             char_small_caps = to_small_caps(safe_char_name)
             count = char_counts[char['id']]
-            
+
             # Get rarity emoji
             rarity_level = char.get('rarity', 1)
             rarity_emoji = RARITY_EMOJIS.get(rarity_level, '⚪')
-            
+
             # Character line with Small Caps
             harem_message += f"✶ {char['id']} [ {rarity_emoji} ] {char_small_caps} x{count}\n"
-        
+
         harem_message += f"--------------------\n\n"
 
     # Build keyboard
@@ -234,6 +273,14 @@ async def harem(update: Update, context: CallbackContext, page: int = 0) -> None
             switch_inline_query_current_chat=f"collection.{user_id}"
         )
     ]]
+    
+    # Add smode button
+    keyboard.append([
+        InlineKeyboardButton(
+            "⚙️ " + to_small_caps("Sorting Mode"),
+            callback_data=f"open_smode:{user_id}"
+        )
+    ])
 
     if total_pages > 1:
         nav_buttons = []
