@@ -99,7 +99,11 @@ async def create_character_code(character_id: int, max_uses: int, created_by: in
     
     try:
         # Verify character exists in main collection (anime_characters_lol)
+        # Try both integer and string format
         character = await collection.find_one({"id": character_id})
+        if not character:
+            character = await collection.find_one({"id": str(character_id)})
+        
         if not character:
             LOGGER.warning(f"Character ID {character_id} not found in anime_characters_lol collection")
             return None
@@ -230,7 +234,10 @@ async def redeem_code(code: str, user_id: int) -> Dict[str, Any]:
             character_id = code_doc.get("character_id")
             
             # Fetch FULL character details from anime_characters_lol (main collection)
+            # Try both integer and string format
             character = await collection.find_one({"id": character_id})
+            if not character:
+                character = await collection.find_one({"id": str(character_id)})
             
             if not character:
                 LOGGER.error(f"Character {character_id} not found in anime_characters_lol during redeem")
@@ -486,7 +493,17 @@ async def sgen_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         return
     
     # Fetch character from anime_characters_lol (main collection)
+    # Try both integer and string format for ID
+    LOGGER.info(f"Searching for character with ID: {character_id} (type: {type(character_id).__name__})")
+    
     character = await collection.find_one({"id": character_id})
+    LOGGER.info(f"Integer search result: {character is not None}")
+    
+    # If not found with integer, try string
+    if not character:
+        LOGGER.info(f"Trying string format: '{str(character_id)}'")
+        character = await collection.find_one({"id": str(character_id)})
+        LOGGER.info(f"String search result: {character is not None}")
     
     if not character:
         # Get helpful database info with actual available IDs
