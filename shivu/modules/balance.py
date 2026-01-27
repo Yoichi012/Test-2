@@ -9,7 +9,7 @@ from telegram.ext import CommandHandler, CallbackQueryHandler, ContextTypes
 
 from pymongo import ReturnDocument
 
-from shivu import application, db, LOGGER, OWNER_ID, SUDO_USERS
+from shivu import application, user_collection, LOGGER, OWNER_ID, SUDO_USERS
 
 # ---------- Premium Styling Helpers ----------
 
@@ -37,18 +37,18 @@ def safe_small_caps(text: str) -> str:
     # First, protect HTML tags by replacing them with placeholders
     html_pattern = r'(<[^>]+>)'
     html_tags = re.findall(html_pattern, text)
-    
+
     # Replace HTML tags with placeholders
     for i, tag in enumerate(html_tags):
         text = text.replace(tag, f'__HTML_TAG_{i}__')
-    
+
     # Convert remaining text to small caps
     result = ''.join(SMALL_CAPS_MAP.get(char, char) for char in text)
-    
+
     # Restore HTML tags
     for i, tag in enumerate(html_tags):
         result = result.replace(f'__HTML_TAG_{i}__', tag)
-    
+
     return result
 
 # Premium Emoji Mapping
@@ -69,22 +69,22 @@ def premium_format(text: str) -> str:
     # First replace emojis
     for key, value in PREMIUM_EMOJIS.items():
         text = text.replace(key, value)
-    
+
     # Apply small caps to specific standalone words (not inside HTML)
     words_to_convert = ['Balance', 'Payment', 'Confirm', 'Cancel', 'Coins', 
                        'Transaction', 'Success', 'Failed', 'Error', 'Usage']
-    
+
     # Process text line by line
     lines = text.split('\n')
     processed_lines = []
-    
+
     for line in lines:
         # Skip lines that are mostly HTML tags
         if re.search(r'<[^>]+>.*<[^>]+>', line):
             # This line has HTML tags, process carefully
             parts = re.split(r'(<[^>]+>)', line)
             processed_parts = []
-            
+
             for part in parts:
                 if part.startswith('<') and part.endswith('>'):
                     # This is an HTML tag, keep as is
@@ -94,18 +94,15 @@ def premium_format(text: str) -> str:
                     for word in words_to_convert:
                         part = re.sub(r'\b' + re.escape(word) + r'\b', safe_small_caps(word), part)
                     processed_parts.append(part)
-            
+
             processed_lines.append(''.join(processed_parts))
         else:
             # Simple line without complex HTML
             for word in words_to_convert:
                 line = re.sub(r'\b' + re.escape(word) + r'\b', safe_small_caps(word), line)
             processed_lines.append(line)
-    
-    return '\n'.join(processed_lines)
 
-# Collections
-user_balance_coll = db.get_collection("user_balance")
+    return '\n'.join(processed_lines)
 
 # In-memory pending payments and cooldowns
 pending_payments: Dict[str, Dict[str, Any]] = {}
@@ -120,61 +117,90 @@ async def validate_payment_target(target_id: int, context: ContextTypes.DEFAULT_
     """Validate if target is a regular user (not bot, channel, or group)."""
     try:
         target_chat = await context.bot.get_chat(target_id)
-        
+
         # Check if it's a bot
         if hasattr(target_chat, 'is_bot') and target_chat.is_bot:
             return False, "✘ ʏᴏᴜ ᴄᴀɴɴᴏᴛ ᴘᴀʏ ᴛᴏ ʙᴏᴛs ᴏʀ ᴄʜᴀɴɴᴇʟs."
-        
+
         # Check if it's a channel or group
         if target_chat.type in ['channel', 'group', 'supergroup']:
             return False, "✘ ʏᴏᴜ ᴄᴀɴɴᴏᴛ ᴘᴀʏ ᴛᴏ ʙᴏᴛs ᴏʀ ᴄʜᴀɴɴᴇʟs."
-        
+
         return True, None
     except Exception as e:
         LOGGER.error(f"Error validating payment target {target_id}: {e}")
         return False, "✘ ɪɴᴠᴀʟɪᴅ ᴛᴀʀɢᴇᴛ ᴜꜱᴇʀ."
 
-# ---------- Helpers ----------
+# ---------- Helpers - FIXED TO USE user_collection ----------
 async def _ensure_balance_doc(user_id: int) -> Dict[str, Any]:
-    """Ensure a balance document exists for the user and return it."""
+    """
+    Ensure a balance field exists in user_collection for the user and return it.
+    FIXED: Now uses user_collection instead of separate user_balance_coll.
+    """
     try:
-        await user_balance_coll.update_one(
-            {"user_id": user_id},
-            {"$setOnInsert": {"user_id": user_id, "balance": 0}},
+        # Update user_collection to ensure balance field exists
+        await user_collection.update_one(
+            {"id": user_id},
+            {
+                "$setOnInsert": {
+                    "id": user_id,
+                    "balance": 0,
+                    "characters": [],
+                    "favorites": []
+                }
+            },
             upsert=True,
         )
-        doc = await user_balance_coll.find_one({"user_id": user_id})
-        return doc or {"user_id": user_id, "balance": 0}
+        doc = await user_collection.find_one({"id": user_id})
+        return doc or {"id": user_id, "balance": 0}
     except Exception:
         LOGGER.exception("Error ensuring balance doc for %s", user_id)
-        return {"user_id": user_id, "balance": 0}
+        return {"id": user_id, "balance": 0}
 
 async def get_balance(user_id: int) -> int:
-    """Return integer balance for a user."""
+    """
+    Return integer balance for a user from user_collection.
+    FIXED: Now uses user_collection instead of user_balance_coll.
+    """
     doc = await _ensure_balance_doc(user_id)
     return int(doc.get("balance", 0))
 
 async def change_balance(user_id: int, amount: int) -> int:
-    """Atomically change balance by `amount`. Returns the new balance after change."""
+    """
+    Atomically change balance by `amount` in user_collection.
+    Returns the new balance after change.
+    FIXED: Now uses user_collection instead of user_balance_coll.
+    """
     if amount == 0:
         return await get_balance(user_id)
 
     try:
-        await user_balance_coll.update_one({"user_id": user_id}, {"$inc": {"balance": int(amount)}}, upsert=True)
-        doc = await user_balance_coll.find_one({"user_id": user_id})
-        return int(doc.get("balance", 0)) if doc else 0
+        # Update balance in user_collection
+        await user_collection.update_one(
+            {"id": user_id}, 
+            {"$inc": {"balance": int(amount)}}, 
+            upsert=True
+        )
+        doc = await user_collection.find_one({"id": user_id})
+        new_balance = int(doc.get("balance", 0)) if doc else 0
+        LOGGER.info(f"✅ Balance changed for user {user_id}: {amount:+d} -> new balance: {new_balance}")
+        return new_balance
     except Exception:
         LOGGER.exception("Failed to change balance for %s by %s", user_id, amount)
         raise
 
 async def _atomic_transfer(sender_id: int, receiver_id: int, amount: int) -> bool:
-    """Atomically transfer coins from sender -> receiver."""
+    """
+    Atomically transfer coins from sender -> receiver in user_collection.
+    FIXED: Now uses user_collection instead of user_balance_coll.
+    """
     if amount <= 0:
         return False
 
     try:
-        sender_after = await user_balance_coll.find_one_and_update(
-            {"user_id": sender_id, "balance": {"$gte": amount}},
+        # Decrement sender's balance (only if sufficient balance exists)
+        sender_after = await user_collection.find_one_and_update(
+            {"id": sender_id, "balance": {"$gte": amount}},
             {"$inc": {"balance": -amount}},
             return_document=ReturnDocument.AFTER,
         )
@@ -183,22 +209,35 @@ async def _atomic_transfer(sender_id: int, receiver_id: int, amount: int) -> boo
         return False
 
     if sender_after is None:
+        LOGGER.warning(f"Transfer failed: sender {sender_id} has insufficient balance")
         return False
 
     try:
-        await user_balance_coll.update_one({"user_id": receiver_id}, {"$inc": {"balance": amount}}, upsert=True)
+        # Increment receiver's balance
+        await user_collection.update_one(
+            {"id": receiver_id}, 
+            {"$inc": {"balance": amount}}, 
+            upsert=True
+        )
+        LOGGER.info(f"✅ Transfer successful: {sender_id} -> {receiver_id}, amount: {amount}")
         return True
     except Exception:
         LOGGER.exception("Failed to increment receiver %s; attempting rollback to sender %s", receiver_id, sender_id)
         try:
-            await user_balance_coll.update_one({"user_id": sender_id}, {"$inc": {"balance": amount}}, upsert=True)
+            # Rollback: restore sender's balance
+            await user_collection.update_one(
+                {"id": sender_id}, 
+                {"$inc": {"balance": amount}}, 
+                upsert=True
+            )
+            LOGGER.info(f"✅ Rollback successful for sender {sender_id}")
         except Exception:
-            LOGGER.exception("Rollback failed for sender %s after transfer failure", sender_id)
+            LOGGER.exception("❌ Rollback failed for sender %s after transfer failure", sender_id)
         return False
 
 # ---------- Command handlers ----------
 async def balance_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """/balance [@username|id] or reply - Show balance."""
+    """/balance [@username|id] or reply - Show balance from user_collection."""
     target = update.effective_user
     if context.args:
         arg = context.args[0]
@@ -218,7 +257,7 @@ async def balance_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
     user_id = getattr(target, "id", update.effective_user.id)
     bal = await get_balance(user_id)
     name = escape(getattr(target, "first_name", str(user_id)))
-    
+
     # Fixed: Proper HTML structure with preserved tags
     message = f"💰 <b>{name}</b>'s {safe_small_caps('Balance')}: <b>{bal:,}</b> ᴄᴏɪɴs"
     await update.message.reply_text(message, parse_mode="HTML")
@@ -312,7 +351,7 @@ async def pay_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         target_name = str(target_id)
 
     sender_name = escape(getattr(sender, "first_name", str(sender.id)))
-    
+
     # Create message with proper HTML
     text = f"❗ <b>ᴘᴀʏᴍᴇɴᴛ ᴄᴏɴғɪʀᴍᴀᴛɪᴏɴ</b>\n\n" \
            f"sᴇɴᴅᴇʀ: <a href='tg://user?id={sender.id}'>{sender_name}</a>\n" \
@@ -415,7 +454,7 @@ async def pay_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     pending_payments.pop(token, None)
 
 async def admin_addbal_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """/addbal <user_id> <amount> - admin-only adjust balance."""
+    """/addbal <user_id> <amount> - admin-only adjust balance in user_collection."""
     user_id = update.effective_user.id
     if user_id != OWNER_ID and user_id not in SUDO_USERS:
         await update.message.reply_text(premium_format("✘ ɴᴏᴛ ᴀᴜᴛʜᴏʀɪᴢᴇᴅ."))
