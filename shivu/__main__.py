@@ -353,37 +353,32 @@ async def guess(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         except Exception:
             LOGGER.exception("Failed updating group/global stats")
 
-        # FIX: ADD DAILY GUESS COUNT UPDATES WITH SAFE DATA PASSING
+        # 🔥 DAILY TRACKING UPDATE - FIXED WITH SAFE DATA HANDLING 🔥
         # Update daily user guess count
         try:
-            # Safely handle None values for username and first_name
             safe_username = update.effective_user.username if update.effective_user.username else ""
-            safe_first_name = update.effective_user.first_name if update.effective_user.first_name else ""
-            
+            safe_first_name = update.effective_user.first_name if update.effective_user.first_name else "Unknown"
+
             await update_daily_user_guess(
                 user_id=user_id,
                 username=safe_username,
                 first_name=safe_first_name
             )
-            LOGGER.info(f"Successfully updated daily user guess for user_id={user_id}")
         except Exception as e:
-            LOGGER.exception(f"Failed to update daily user guess count for user_id={user_id}: {e}")
-            # Don't return - allow character collection to continue
+            LOGGER.exception(f"❌ Failed to update daily user guess: {e}")
 
-        # Update daily group guess count
-        try:
-            # Safely handle None value for group_name
-            safe_group_name = update.effective_chat.title if update.effective_chat.title else ""
-            
-            await update_daily_group_guess(
-                group_id=chat_id,
-                group_name=safe_group_name
-            )
-            LOGGER.info(f"Successfully updated daily group guess for group_id={chat_id}")
-        except Exception as e:
-            LOGGER.exception(f"Failed to update daily group guess count for group_id={chat_id}: {e}")
-            # Don't return - allow character collection to continue
-        # END FIX
+        # Update daily group guess count (only for groups/supergroups)
+        if update.effective_chat.type in ['group', 'supergroup']:
+            try:
+                safe_group_name = update.effective_chat.title if update.effective_chat.title else "Unknown Group"
+
+                await update_daily_group_guess(
+                    group_id=chat_id,
+                    group_name=safe_group_name
+                )
+            except Exception as e:
+                LOGGER.exception(f"❌ Failed to update daily group guess: {e}")
+        # 🔥 END OF DAILY TRACKING UPDATE 🔥
 
         # STEP 2: Coin Alert Message (with reaction)
         coin_alert_msg = await update.message.reply_text(
@@ -490,13 +485,13 @@ async def balance_command(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         user_data = await user_collection.find_one({'id': user_id})
         if user_data:
             balance = user_data.get('balance', 0)
-            balance_msg = f"Your current balance: {balance} coins"
+            balance_msg = to_small_caps(f"💰 ʏᴏᴜʀ ᴄᴜʀʀᴇɴᴛ ʙᴀʟᴀɴᴄᴇ: {balance} ᴄᴏɪɴꜱ")
             await update.message.reply_text(balance_msg)
         else:
-            await update.message.reply_text("You don't have a balance yet. Start guessing characters to earn coins!")
+            await update.message.reply_text(to_small_caps("You don't have a balance yet. Start guessing characters to earn coins!"))
     except Exception as e:
         LOGGER.exception(f"Failed to fetch balance: {e}")
-        await update.message.reply_text("Failed to fetch your balance. Please try again later.")
+        await update.message.reply_text(to_small_caps("Failed to fetch your balance. Please try again later."))
 
 def main() -> None:
     """Run the bot - register handlers and start polling."""
