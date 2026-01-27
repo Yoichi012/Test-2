@@ -1,3 +1,4 @@
+import datetime
 import pytz
 import importlib
 import time
@@ -506,10 +507,9 @@ def main() -> None:
         # Schedule daily reset at 12:00 AM IST
         application.job_queue.run_daily(
             reset_daily_counts,
-            time=time(0, 0, 0),
+            time=datetime.time(hour=0, minute=0, second=0, tzinfo=pytz.timezone('Asia/Kolkata')),
             days=(0, 1, 2, 3, 4, 5, 6),
-            name="reset_daily_counts",
-            timezone=pytz.timezone('Asia/Kolkata')
+            name="reset_daily_counts"
         )
         LOGGER.info("Daily reset scheduled via JobQueue - will reset counts daily at 12:00 AM IST")
     except Exception as e:
