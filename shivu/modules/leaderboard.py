@@ -9,7 +9,7 @@ from telegram.ext import CommandHandler, CallbackContext, CallbackQueryHandler
 
 from shivu import (
     application, VIDEO_URL, user_collection, top_global_groups_collection,
-    group_user_totals_collection
+    group_user_totals_collection, db
 )
 from motor.motor_asyncio import AsyncIOMotorDatabase
 
@@ -63,9 +63,6 @@ def get_ist_datetime() -> datetime:
 # ============================================================================
 # DAILY COLLECTIONS (IST-based)
 # ============================================================================
-
-# Get database instance from existing collection
-db: AsyncIOMotorDatabase = user_collection.database
 
 # Create new collections for daily tracking (IST-based)
 daily_user_guesses_collection = db.get_collection('daily_user_guesses')
@@ -247,67 +244,67 @@ async def show_coin_top() -> str:
 async def show_group_top() -> str:
     """sʜᴏᴡ ᴛᴏᴘ 10 ɢʀᴏᴜᴘs ʙʏ ᴄʜᴀʀᴀᴄᴛᴇʀ ɢᴜᴇssᴇs (TODAY - IST)."""
     today = get_ist_date()
-    
+
     # Query daily group guesses for today
     cursor = daily_group_guesses_collection.aggregate([
         {"$match": {"date": today}},
         {"$sort": {"count": -1}},
         {"$limit": 10}
     ])
-    
+
     daily_data = await cursor.to_list(length=10)
-    
+
     if not daily_data:
         return "👥 <b>ᴛᴏᴘ 10 ɢʀᴏᴜᴘs ʙʏ ᴄʜᴀʀᴀᴄᴛᴇʀ ɢᴜᴇssᴇs (ᴛᴏᴅᴀʏ)</b>\n\nɴᴏ ɢᴜᴇssᴇs ᴛᴏᴅᴀʏ ʏᴇᴛ!"
-    
+
     message = "👥 <b>ᴛᴏᴘ 10 ɢʀᴏᴜᴘs ʙʏ ᴄʜᴀʀᴀᴄᴛᴇʀ ɢᴜᴇssᴇs (ᴛᴏᴅᴀʏ)</b>\n\n"
-    
+
     for i, group in enumerate(daily_data, start=1):
         group_name = html.escape(group.get('group_name', 'Unknown'))
         display_name = to_small_caps(group_name)
-        
+
         if len(display_name) > 20:
             display_name = display_name[:20] + '...'
-        
+
         count = group.get('count', 0)
         message += f'{i}. <b>{display_name}</b> ➾ <b>{count}</b>\n'
-    
+
     return message
 
 
 async def show_group_user_top(chat_id: Optional[int] = None) -> str:
     """sʜᴏᴡ ᴛᴏᴘ 10 ᴜsᴇʀs ʙʏ ᴄᴏʀʀᴇᴄᴛ ɢᴜᴇssᴇs (TODAY - IST)."""
     today = get_ist_date()
-    
+
     # Query daily user guesses for today
     cursor = daily_user_guesses_collection.aggregate([
         {"$match": {"date": today}},
         {"$sort": {"count": -1}},
         {"$limit": 10}
     ])
-    
+
     daily_data = await cursor.to_list(length=10)
-    
+
     if not daily_data:
         return "⏳ <b>ᴛᴏᴘ 10 ᴜsᴇʀs ʙʏ ᴄᴏʀʀᴇᴄᴛ ɢᴜᴇssᴇs (ᴛᴏᴅᴀʏ)</b>\n\nɴᴏ ɢᴜᴇssᴇs ᴛᴏᴅᴀʏ ʏᴇᴛ!"
-    
+
     message = "⏳ <b>ᴛᴏᴘ 10 ᴜsᴇʀs ʙʏ ᴄᴏʀʀᴇᴄᴛ ɢᴜᴇssᴇs (ᴛᴏᴅᴀʏ)</b>\n\n"
-    
+
     for i, user in enumerate(daily_data, start=1):
         username = user.get('username', '')
         first_name = html.escape(user.get('first_name', 'Unknown'))
         display_name = to_small_caps(first_name)
-        
+
         if len(display_name) > 15:
             display_name = display_name[:15] + '...'
-        
+
         count = user.get('count', 0)
-        
+
         if username:
             message += f'{i}. <a href="https://t.me/{username}"><b>{display_name}</b></a> ➾ <b>{count}</b>\n'
         else:
             message += f'{i}. <b>{display_name}</b> ➾ <b>{count}</b>\n'
-    
+
     return message
 
 
