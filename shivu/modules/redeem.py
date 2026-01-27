@@ -29,9 +29,33 @@ SMALL_CAPS_MAP = {
     '6': '6', '7': '7', '8': '8', '9': '9'
 }
 
+# ---------- Rarity Mapping (matching your system) ----------
+RARITY_MAP = {
+    1: "⚪ ᴄᴏᴍᴍᴏɴ",
+    2: "🔵 ʀᴀʀᴇ",
+    3: "🟡 ʟᴇɢᴇɴᴅᴀʀʏ",
+    4: "💮 ꜱᴘᴇᴄɪᴀʟ",
+    5: "👹 ᴀɴᴄɪᴇɴᴛ",
+    6: "🎐 ᴄᴇʟᴇꜱᴛɪᴀʟ",
+    7: "🔮 ᴇᴘɪᴄ",
+    8: "🪐 ᴄᴏꜱᴍɪᴄ",
+    9: "⚰️ ɴɪɢʜᴛᴍᴀʀᴇ",
+    10: "🌬️ ꜰʀᴏꜱᴛʙᴏʀɴ",
+    11: "💝 ᴠᴀʟᴇɴᴛɪɴᴇ",
+    12: "🌸 ꜱᴘʀɪɴɢ",
+    13: "🏖️ ᴛʀᴏᴘɪᴄᴀʟ",
+    14: "🍭 ᴋᴀᴡᴀɪɪ",
+    15: "🧬 ʜʏʙʀɪᴅ"
+}
+
 def to_small_caps(text: str) -> str:
     """Convert text to small caps Unicode characters."""
     return ''.join(SMALL_CAPS_MAP.get(char, char) for char in str(text))
+
+
+def get_rarity_display(rarity: int) -> str:
+    """Get rarity display string with emoji and name."""
+    return RARITY_MAP.get(rarity, f"⚪ ᴜɴᴋɴᴏᴡɴ ({rarity})")
 
 
 # ---------- Code Generation ----------
@@ -284,6 +308,8 @@ async def redeem_code(code: str, user_id: int) -> Dict[str, Any]:
             character_name = character.get("name", "Unknown")
             anime_name = character.get("anime", "Unknown")
             img_url = character.get("img_url")
+            rarity = character.get("rarity", 1)
+            rarity_display = get_rarity_display(rarity)
             
             # Build success message with character details
             if is_duplicate:
@@ -294,7 +320,7 @@ async def redeem_code(code: str, user_id: int) -> Dict[str, Any]:
                     f"👤 <b>ɴᴀᴍᴇ:</b> {escape(character_name)}\n"
                     f"📺 <b>ᴀɴɪᴍᴇ:</b> {escape(anime_name)}\n"
                     f"🆔 <b>ɪᴅ:</b> {character_id}\n"
-                    f"⭐ <b>ʀᴀʀɪᴛʏ:</b> {character.get('rarity', 1)}\n"
+                    f"⭐ <b>ʀᴀʀɪᴛʏ:</b> {rarity_display}\n"
                     f"━━━━━━━━━━━━━━━\n\n"
                     f"ℹ️ ʏᴏᴜ ᴀʟʀᴇᴀᴅʏ ʜᴀᴅ ᴛʜɪs ᴄʜᴀʀᴀᴄᴛᴇʀ.\n"
                     f"✨ ᴅᴜᴘʟɪᴄᴀᴛᴇ ᴀᴅᴅᴇᴅ ᴛᴏ ʏᴏᴜʀ ᴄᴏʟʟᴇᴄᴛɪᴏɴ!"
@@ -307,7 +333,7 @@ async def redeem_code(code: str, user_id: int) -> Dict[str, Any]:
                     f"👤 <b>ɴᴀᴍᴇ:</b> {escape(character_name)}\n"
                     f"📺 <b>ᴀɴɪᴍᴇ:</b> {escape(anime_name)}\n"
                     f"🆔 <b>ɪᴅ:</b> {character_id}\n"
-                    f"⭐ <b>ʀᴀʀɪᴛʏ:</b> {character.get('rarity', 1)}\n"
+                    f"⭐ <b>ʀᴀʀɪᴛʏ:</b> {rarity_display}\n"
                     f"━━━━━━━━━━━━━━━"
                 )
             
@@ -459,6 +485,7 @@ async def sgen_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         character_name = character.get("name", "Unknown")
         anime_name = character.get("anime", "Unknown")
         rarity = character.get("rarity", 1)
+        rarity_display = get_rarity_display(rarity)
         
         response = (
             f"<b>✅ {to_small_caps('CHARACTER CODE GENERATED')}</b>\n\n"
@@ -467,7 +494,7 @@ async def sgen_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
             f"👤 <b>{to_small_caps('Character:')}</b> {escape(character_name)}\n"
             f"📺 <b>{to_small_caps('Anime:')}</b> {escape(anime_name)}\n"
             f"🆔 <b>{to_small_caps('ID:')}</b> {character_id}\n"
-            f"⭐ <b>{to_small_caps('Rarity:')}</b> {rarity}\n"
+            f"⭐ <b>{to_small_caps('Rarity:')}</b> {rarity_display}\n"
             f"👥 <b>{to_small_caps('Max Uses:')}</b> {max_uses}"
         )
         await update.message.reply_text(response, parse_mode="HTML")
