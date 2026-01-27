@@ -241,7 +241,7 @@ async def leaderboard_callback(update: Update, context: CallbackContext) -> None
 
     if data == "leaderboard_main":
         # Return to main menu
-        caption = "📊 <b>Leaderboard Menu</b>\n\nChoose a ranking to view:"
+        caption = "📊 <b>ʟᴇᴀᴅᴇʀʙᴏᴀʀᴅ ᴍᴇɴᴜ</b>\n\nᴄʜᴏᴏꜱᴇ ᴀ ʀᴀɴᴋɪɴɢ ᴛᴏ ᴠɪᴇᴡ:"
         reply_markup = InlineKeyboardMarkup(main_keyboard)
         await query.edit_message_caption(caption=caption, parse_mode='HTML', reply_markup=reply_markup)
 
