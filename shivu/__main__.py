@@ -1,3 +1,5 @@
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
+import pytz
 import importlib
 import time
 import random
@@ -26,6 +28,9 @@ from shivu.modules import ALL_MODULES
 # Import all modules declared in ALL_MODULES (same as original behavior)
 for module_name in ALL_MODULES:
     importlib.import_module("shivu.modules." + module_name)
+
+# Initialize scheduler for daily reset
+scheduler = AsyncIOScheduler()
 
 # Rarity display mapping (presentation layer only - DB still stores integers)
 RARITY_MAP = {
@@ -127,6 +132,7 @@ async def _update_user_info(user_id: int, tg_user: Update.effective_user) -> Non
                 'first_name': tg_user.first_name,
                 'characters': [],
                 'balance': 0,  # Initialize balance
+                'daily_grab_count': 0,  # Initialize daily grab count
             }
             if update_fields:
                 base.update(update_fields)
@@ -146,7 +152,14 @@ async def _update_group_user_totals(user_id: int, chat_id: int, tg_user: Update.
                 update_fields['first_name'] = tg_user.first_name
             if update_fields:
                 await group_user_totals_collection.update_one({'user_id': user_id, 'group_id': chat_id}, {'$set': update_fields})
-            await group_user_totals_collection.update_one({'user_id': user_id, 'group_id': chat_id}, {'$inc': {'count': 1}})
+            # MODIFIED: Added $inc for daily_group_count
+            await group_user_totals_collection.update_one(
+                {'user_id': user_id, 'group_id': chat_id}, 
+                {
+                    '$inc': {'count': 1, 'daily_group_count': 1},
+                    '$set': update_fields
+                } if update_fields else {'$inc': {'count': 1, 'daily_group_count': 1}}
+            )
         else:
             await group_user_totals_collection.insert_one({
                 'user_id': user_id,
@@ -154,6 +167,7 @@ async def _update_group_user_totals(user_id: int, chat_id: int, tg_user: Update.
                 'username': getattr(tg_user, 'username', None),
                 'first_name': tg_user.first_name,
                 'count': 1,
+                'daily_group_count': 1,  # Initialize daily group count
             })
     except Exception as e:
         LOGGER.exception("Failed to update group_user_totals: %s", e)
@@ -177,6 +191,27 @@ async def _update_top_global_groups(chat_id: int, chat_title: Optional[str]) -> 
             })
     except Exception as e:
         LOGGER.exception("Failed to update top_global_groups: %s", e)
+
+async def reset_daily_counts():
+    """Reset daily counts for all users and groups at midnight IST."""
+    try:
+        LOGGER.info("Resetting daily counts...")
+        
+        # Reset user daily_grab_count
+        result_users = await user_collection.update_many(
+            {}, 
+            {'$set': {'daily_grab_count': 0}}
+        )
+        
+        # Reset group_user_totals daily_group_count
+        result_groups = await group_user_totals_collection.update_many(
+            {}, 
+            {'$set': {'daily_group_count': 0}}
+        )
+        
+        LOGGER.info(f"Daily counts reset: {result_users.modified_count} users, {result_groups.modified_count} group records updated")
+    except Exception as e:
+        LOGGER.exception(f"Failed to reset daily counts: {e}")
 
 # Handlers
 async def message_counter(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -335,10 +370,13 @@ async def guess(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         # update/create user doc and append character to their collection atomically
         try:
             await _update_user_info(user_id, update.effective_user)
-            # Use $push to allow duplicates in user's collection
+            # MODIFIED: Added $inc for daily_grab_count to the existing update query
             await user_collection.update_one(
                 {'id': user_id}, 
-                {'$push': {'characters': character_to_store}}
+                {
+                    '$push': {'characters': character_to_store},
+                    '$inc': {'daily_grab_count': 1}  # Added daily count increment
+                }
             )
         except Exception as e:
             LOGGER.exception(f"Failed updating user character collection: {e}")
@@ -467,6 +505,20 @@ async def balance_command(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 
 def main() -> None:
     """Run the bot - register handlers and start polling."""
+    # Setup daily reset scheduler
+    try:
+        scheduler.add_job(
+            reset_daily_counts,
+            'cron',
+            hour=0,
+            minute=0,
+            timezone=pytz.timezone('Asia/Kolkata')
+        )
+        scheduler.start()
+        LOGGER.info("Daily reset scheduler started - will reset counts daily at 12:00 AM IST")
+    except Exception as e:
+        LOGGER.exception(f"Failed to start scheduler: {e}")
+    
     # Register commands
     # Keep block=False to allow concurrency where Application was created with appropriate executor
     application.add_handler(CommandHandler(["guess", "protecc", "collect", "grab", "hunt"], guess, block=False))
