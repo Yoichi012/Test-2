@@ -71,6 +71,26 @@ def get_user_lock(user_id):
         user_locks[user_id] = asyncio.Lock()
     return user_locks[user_id]
 
+async def is_bot_or_channel(client, user_id):
+    """Check if the user is a bot, channel, or group"""
+    try:
+        chat = await client.get_chat(user_id)
+        # Check if it's a bot
+        if hasattr(chat, 'type'):
+            if chat.type in ['channel', 'group', 'supergroup']:
+                return True, "channel/group"
+        # Check if user is a bot
+        try:
+            user = await client.get_users(user_id)
+            if user.is_bot:
+                return True, "bot"
+        except:
+            pass
+        return False, None
+    except Exception as e:
+        logger.error(f"Error checking if user {user_id} is bot/channel: {e}")
+        return False, None
+
 async def cleanup_expired_operations():
     """Clean up expired pending trades and gifts"""
     current_time = time.time()
@@ -186,6 +206,15 @@ async def trade(client, message):
     # Check if trading with self
     if sender_id == receiver_id:
         await message.reply_text("❌ You can't trade a character with yourself!")
+        return
+    
+    # Check if receiver is a bot or channel/group
+    is_invalid, invalid_type = await is_bot_or_channel(client, receiver_id)
+    if is_invalid:
+        if invalid_type == "bot":
+            await message.reply_text("🤖 Seriously? You're trying to trade with a bot? They don't need characters!")
+        else:
+            await message.reply_text("📢 You can't trade with channels or groups! Trade with actual users only.")
         return
     
     # Check cooldown
@@ -438,6 +467,15 @@ async def gift(client, message):
     # Check if gifting to self
     if sender_id == receiver_id:
         await message.reply_text("❌ You can't gift a character to yourself!")
+        return
+    
+    # Check if receiver is a bot or channel/group
+    is_invalid, invalid_type = await is_bot_or_channel(client, receiver_id)
+    if is_invalid:
+        if invalid_type == "bot":
+            await message.reply_text("🤖 Seriously? You're trying to gift to a bot? They don't collect characters!")
+        else:
+            await message.reply_text("📢 You can't gift to channels or groups! Gift to actual users only.")
         return
     
     # Check cooldown
