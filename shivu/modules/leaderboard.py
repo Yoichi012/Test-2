@@ -97,15 +97,13 @@ async def update_daily_user_guess(user_id: int, username: str = "", first_name: 
                 },
                 "$setOnInsert": {
                     "date": today,
-                    "user_id": user_id,
-                    "count": 0
+                    "user_id": user_id
                 }
             },
             upsert=True
         )
-    except Exception:
-        # Silently fail to not break existing flow
-        pass
+    except Exception as e:
+        print(f"Error updating daily user guess for user_id {user_id}: {e}")
 
 
 async def update_daily_group_guess(group_id: int, group_name: str = "") -> None:
@@ -128,15 +126,13 @@ async def update_daily_group_guess(group_id: int, group_name: str = "") -> None:
                 },
                 "$setOnInsert": {
                     "date": today,
-                    "group_id": group_id,
-                    "count": 0
+                    "group_id": group_id
                 }
             },
             upsert=True
         )
-    except Exception:
-        # Silently fail to not break existing flow
-        pass
+    except Exception as e:
+        print(f"Error updating daily group guess for group_id {group_id}: {e}")
 
 
 async def leaderboard_entry(update: Update, context: CallbackContext) -> None:
