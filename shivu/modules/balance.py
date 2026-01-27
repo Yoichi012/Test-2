@@ -119,12 +119,17 @@ async def validate_payment_target(target_id: int, context: ContextTypes.DEFAULT_
         target_chat = await context.bot.get_chat(target_id)
 
         # Check if it's a bot
-        if hasattr(target_chat, 'is_bot') and target_chat.is_bot:
-            return False, "✘ ʏᴏᴜ ᴄᴀɴɴᴏᴛ ᴘᴀʏ ᴛᴏ ʙᴏᴛs ᴏʀ ᴄʜᴀɴɴᴇʟs."
-
+        if hasattr(target_chat, 'type') and target_chat.type == 'private':
+            # It's a private chat, check if user is a bot
+            try:
+                if hasattr(target_chat, 'is_bot') and target_chat.is_bot:
+                    return False, "🤖 Seriously? You're trying to pay a bot? They don't need coins!"
+            except:
+                pass
+        
         # Check if it's a channel or group
         if target_chat.type in ['channel', 'group', 'supergroup']:
-            return False, "✘ ʏᴏᴜ ᴄᴀɴɴᴏᴛ ᴘᴀʏ ᴛᴏ ʙᴏᴛs ᴏʀ ᴄʜᴀɴɴᴇʟs."
+            return False, "📢 You can't pay to channels or groups! Pay to actual users only."
 
         return True, None
     except Exception as e:
@@ -309,10 +314,10 @@ async def pay_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         await update.message.reply_text(premium_format("✓ ʏᴏᴜ ᴄᴀɴɴᴏᴛ ᴘᴀʏ ʏᴏᴜʀsᴇʟғ."))
         return
 
-    # Enhanced validation
+    # Enhanced validation - check if target is bot/channel/group
     is_valid, error_msg = await validate_payment_target(target_id, context)
     if not is_valid:
-        await update.message.reply_text(premium_format(error_msg))
+        await update.message.reply_text(error_msg)
         return
 
     # Parse amount
