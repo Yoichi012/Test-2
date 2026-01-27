@@ -390,6 +390,58 @@ async def gen_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         )
 
 
+async def debug_db_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """
+    /debugdb - Check database connection and collection info (Admin only)
+    """
+    user_id = update.effective_user.id
+    
+    # Check permissions
+    if user_id != OWNER_ID and user_id not in SUDO_USERS:
+        await update.message.reply_text("✘ Not authorized")
+        return
+    
+    try:
+        # Check collection name
+        collection_name = collection.name
+        db_name = collection.database.name
+        
+        # Count documents
+        total_chars = await collection.count_documents({})
+        
+        # Get some sample IDs
+        sample_chars = await collection.find({}, {"id": 1, "name": 1}).limit(5).to_list(length=5)
+        
+        # Build debug info
+        debug_info = (
+            f"<b>📊 DATABASE DEBUG INFO</b>\n\n"
+            f"<b>Database:</b> {db_name}\n"
+            f"<b>Collection:</b> {collection_name}\n"
+            f"<b>Total Characters:</b> {total_chars}\n\n"
+        )
+        
+        if sample_chars:
+            debug_info += "<b>Sample Characters:</b>\n"
+            for char in sample_chars:
+                char_id = char.get('id', 'N/A')
+                char_name = char.get('name', 'N/A')
+                debug_info += f"• ID {char_id}: {escape(char_name)}\n"
+        else:
+            debug_info += "⚠️ No characters found in collection!\n"
+        
+        # Check user_collection too
+        user_coll_name = user_collection.name
+        total_users = await user_collection.count_documents({})
+        debug_info += f"\n<b>User Collection:</b> {user_coll_name}\n"
+        debug_info += f"<b>Total Users:</b> {total_users}\n"
+        
+        await update.message.reply_text(debug_info, parse_mode="HTML")
+        
+    except Exception as e:
+        LOGGER.error(f"Debug command error: {e}")
+        await update.message.reply_text(f"❌ Error: {str(e)}")
+
+
 async def sgen_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """
     /sgen <character_id> <max_users>
@@ -435,28 +487,34 @@ async def sgen_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     character = await collection.find_one({"id": character_id})
     
     if not character:
-        # Get helpful database info
+        # Get helpful database info with actual available IDs
         try:
-            total_chars = await collection.count_documents({})
+            # Get all character IDs
+            all_chars = await collection.find({}, {"id": 1, "name": 1}).sort("id", 1).to_list(length=None)
+            total_chars = len(all_chars)
             
-            # Get ID range using aggregation
-            pipeline_min = [{"$group": {"_id": None, "min_id": {"$min": "$id"}}}]
-            pipeline_max = [{"$group": {"_id": None, "max_id": {"$max": "$id"}}}]
-            
-            min_result = await collection.aggregate(pipeline_min).to_list(1)
-            max_result = await collection.aggregate(pipeline_max).to_list(1)
-            
-            min_id = min_result[0]['min_id'] if min_result else 1
-            max_id = max_result[0]['max_id'] if max_result else 1
-            
-            error_msg = (
-                f"<b>{to_small_caps('✘ Character Not Found')}</b>\n\n"
-                f"{to_small_caps(f'Character ID {character_id} does not exist in anime_characters_lol.')}\n\n"
-                f"<b>{to_small_caps('Database Info:')}</b>\n"
-                f"{to_small_caps(f'• Total Characters: {total_chars}')}\n"
-                f"{to_small_caps(f'• Valid ID Range: {min_id} - {max_id}')}\n\n"
-                f"{to_small_caps('Tip: Use an ID within the valid range!')}"
-            )
+            if total_chars > 0:
+                # Get available IDs
+                available_ids = [char['id'] for char in all_chars]
+                min_id = min(available_ids)
+                max_id = max(available_ids)
+                
+                # Show first 10 available IDs as examples
+                example_ids = ", ".join(str(id) for id in available_ids[:10])
+                if len(available_ids) > 10:
+                    example_ids += "..."
+                
+                error_msg = (
+                    f"<b>{to_small_caps('✘ Character Not Found')}</b>\n\n"
+                    f"{to_small_caps(f'Character ID {character_id} does not exist in database.')}\n\n"
+                    f"<b>{to_small_caps('Database Info:')}</b>\n"
+                    f"{to_small_caps(f'• Total Characters: {total_chars}')}\n"
+                    f"{to_small_caps(f'• ID Range: {min_id} - {max_id}')}\n"
+                    f"{to_small_caps(f'• Available IDs: {example_ids}')}\n\n"
+                    f"{to_small_caps('Tip: Try one of the available IDs listed above!')}"
+                )
+            else:
+                error_msg = f"{to_small_caps('✘ No characters found in database!')}"
         except Exception as e:
             LOGGER.error(f"Error fetching database stats: {e}")
             error_msg = f"{to_small_caps(f'✘ Character ID {character_id} not found in database.')}"
@@ -528,6 +586,7 @@ def register_handlers():
     application.add_handler(CommandHandler("gen", gen_command, block=False))
     application.add_handler(CommandHandler("sgen", sgen_command, block=False))
     application.add_handler(CommandHandler("redeem", redeem_command, block=False))
+    application.add_handler(CommandHandler("debugdb", debug_db_command, block=False))
     LOGGER.info("Redeem system handlers registered successfully")
 
 
