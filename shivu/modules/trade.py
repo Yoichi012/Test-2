@@ -26,6 +26,26 @@ last_gift_time = {}
 TRADE_COOLDOWN = 60  # 60 seconds
 GIFT_COOLDOWN = 30   # 30 seconds
 PENDING_EXPIRY = 300  # 5 minutes
+GIFT_CONFIRM_TIMEOUT = 30  # 30 seconds - gift confirmation timeout
+
+# Rarity mapping with small caps
+RARITY_MAP = {
+    1: "⚪ ᴄᴏᴍᴍᴏɴ", 
+    2: "🔵 ʀᴀʀᴇ", 
+    3: "🟡 ʟᴇɢᴇɴᴅᴀʀʏ", 
+    4: "💮 ꜱᴘᴇᴄɪᴀʟ",
+    5: "👹 ᴀɴᴄɪᴇɴᴛ", 
+    6: "🎐 ᴄᴇʟᴇꜱᴛɪᴀʟ", 
+    7: "🔮 ᴇᴘɪᴄ", 
+    8: "🪐 ᴄᴏꜱᴍɪᴄ",
+    9: "⚰️ ɴɪɢʜᴛᴍᴀʀᴇ", 
+    10: "🌬️ ꜰʀᴏꜱᴛʙᴏʀɴ", 
+    11: "💝 ᴠᴀʟᴇɴᴛɪɴᴇ",
+    12: "🌸 ꜱᴘʀɪɴɢ", 
+    13: "🏖️ ᴛʀᴏᴘɪᴄᴀʟ", 
+    14: "🍭 ᴋᴀᴡᴀɪɪ", 
+    15: "🧬 ʜʏʙʀɪᴅ"
+}
 
 # Small caps conversion map for premium UI
 SMALL_CAPS_MAP = {
@@ -40,7 +60,9 @@ SMALL_CAPS_MAP = {
 }
 
 def to_small_caps(text):
-    """Convert text to small caps for premium UI"""
+    """Convert text to small caps for premium UI - handles any data type"""
+    # Convert to string first to handle integers and other types
+    text = str(text) if text is not None else 'Unknown'
     return ''.join(SMALL_CAPS_MAP.get(c, c) for c in text)
 
 def get_user_lock(user_id):
@@ -53,19 +75,23 @@ async def cleanup_expired_operations():
     """Clean up expired pending trades and gifts"""
     current_time = time.time()
     
-    # Clean expired trades
+    # Clean expired trades (5 minutes)
     expired_trades = [k for k, v in pending_trades.items() 
                       if current_time - v['timestamp'] > PENDING_EXPIRY]
     for key in expired_trades:
         del pending_trades[key]
         logger.info(f"Cleaned expired trade: {key}")
     
-    # Clean expired gifts
+    # Clean expired gifts (30 seconds for confirmation timeout)
     expired_gifts = [k for k, v in pending_gifts.items() 
-                     if current_time - v['timestamp'] > PENDING_EXPIRY]
+                     if current_time - v['timestamp'] > GIFT_CONFIRM_TIMEOUT]
     for key in expired_gifts:
+        # Remove from cooldown to allow new gift
+        sender_id = key[0]
+        if sender_id in last_gift_time:
+            del last_gift_time[sender_id]
         del pending_gifts[key]
-        logger.info(f"Cleaned expired gift: {key}")
+        logger.info(f"Cleaned expired gift: {key} and removed cooldown")
 
 async def auto_cleanup_task():
     """Background task to auto-cleanup expired operations every 60 seconds"""
@@ -110,11 +136,19 @@ def format_premium_gift_card(character, sender_name):
     char_id = character.get('id', 'Unknown')
     rarity = character.get('rarity', 'Unknown')
     
+    # Get rarity from RARITY_MAP if it's a number
+    if isinstance(rarity, int) and rarity in RARITY_MAP:
+        rarity_display = RARITY_MAP[rarity]
+    elif isinstance(rarity, str):
+        # If it's already a string, convert to small caps
+        rarity_display = to_small_caps(rarity)
+    else:
+        rarity_display = to_small_caps(str(rarity))
+    
     # Convert to small caps for premium look
     name_sc = to_small_caps(name)
     anime_sc = to_small_caps(anime)
     char_id_sc = to_small_caps(char_id)
-    rarity_sc = to_small_caps(rarity)
     
     card = (
         f"━━━━━━━━━━━━━━━━━━\n"
@@ -123,7 +157,7 @@ def format_premium_gift_card(character, sender_name):
         f"✨ {to_small_caps('name')}   : **{name_sc}**\n"
         f"🎬 {to_small_caps('anime')}  : **{anime_sc}**\n"
         f"🆔 {to_small_caps('id')}     : `{char_id_sc}`\n"
-        f"⭐ {to_small_caps('rarity')} : **{rarity_sc}**\n"
+        f"⭐ {to_small_caps('rarity')} : {rarity_display}\n"
         f"━━━━━━━━━━━━━━━━━━\n"
         f"💎 {to_small_caps('premium gift from')} **{sender_name}**"
     )
@@ -478,7 +512,8 @@ async def gift(client, message):
             gift_msg = (
                 f"{gift_card}\n\n"
                 f"━━━━━━━━━━━━━━━━━━\n"
-                f"Are you sure you want to gift this to {receiver_mention}?"
+                f"Are you sure you want to gift this to {receiver_mention}?\n\n"
+                f"⏰ {to_small_caps('you have 30 seconds to confirm')}"
             )
             
             await message.reply_text(gift_msg, reply_markup=keyboard)
@@ -515,10 +550,16 @@ async def on_gift_callback(client, callback_query):
     
     gift_data = pending_gifts[gift_key]
     
-    # Check if gift expired
-    if time.time() - gift_data['timestamp'] > PENDING_EXPIRY:
+    # Check if gift expired (30 seconds timeout)
+    if time.time() - gift_data['timestamp'] > GIFT_CONFIRM_TIMEOUT:
         del pending_gifts[gift_key]
-        await callback_query.message.edit_text("❌ This gift request has expired!")
+        # Remove cooldown to allow new gift
+        if sender_id in last_gift_time:
+            del last_gift_time[sender_id]
+        await callback_query.message.edit_text(
+            "❌ This gift request has expired!\n\n"
+            "You can now send a new gift."
+        )
         return
     
     if action == "confirm_gift":
