@@ -68,21 +68,22 @@ async def leaderboard_entry(update: Update, context: CallbackContext) -> None:
 
 
 async def show_char_top() -> str:
-    """sʜᴏᴡ ᴛᴏᴘ 10 ᴜsᴇʀs ʙʏ ᴄʜᴀʀᴀᴄᴛᴇʀ ᴄᴏᴜɴᴛ."""
+    """sʜᴏᴡ ᴛᴏᴘ 10 ᴜsᴇʀs ʙʏ ᴅᴀɪʟʏ ɢʀᴀʙ ᴄᴏᴜɴᴛ."""
     cursor = user_collection.aggregate([
         {
             "$project": {
                 "username": 1,
                 "first_name": 1,
-                "character_count": {"$size": "$characters"}
+                "daily_grab_count": {"$ifNull": ["$daily_grab_count", 0]}
             }
         },
-        {"$sort": {"character_count": -1}},
+        {"$match": {"daily_grab_count": {"$gt": 0}}},
+        {"$sort": {"daily_grab_count": -1}},
         {"$limit": 10}
     ])
     leaderboard_data = await cursor.to_list(length=10)
     
-    message = "🏆 <b>ᴛᴏᴘ 10 ᴜsᴇʀs ᴡɪᴛʜ ᴍᴏsᴛ ᴄʜᴀʀᴀᴄᴛᴇʀs</b>\n\n"
+    message = "🏆 <b>TOP 10 USERS (DAILY)</b>\n\n"
     
     for i, user in enumerate(leaderboard_data, start=1):
         username = user.get('username', '')
@@ -94,12 +95,12 @@ async def show_char_top() -> str:
         if len(display_name) > 15:
             display_name = display_name[:15] + '...'
         
-        character_count = user['character_count']
+        daily_grab_count = user['daily_grab_count']
         
         if username:
-            message += f'{i}. <a href="https://t.me/{username}"><b>{display_name}</b></a> ➾ <b>{character_count}</b>\n'
+            message += f'{i}. <a href="https://t.me/{username}"><b>{display_name}</b></a> ➾ <b>{daily_grab_count}</b>\n'
         else:
-            message += f'{i}. <b>{display_name}</b> ➾ <b>{character_count}</b>\n'
+            message += f'{i}. <b>{display_name}</b> ➾ <b>{daily_grab_count}</b>\n'
     
     return message
 
@@ -147,15 +148,21 @@ async def show_coin_top() -> str:
 
 
 async def show_group_top() -> str:
-    """sʜᴏᴡ ᴛᴏᴘ 10 ɢʀᴏᴜᴘs ʙʏ ᴄʜᴀʀᴀᴄᴛᴇʀ ɢᴜᴇssᴇs."""
+    """sʜᴏᴡ ᴛᴏᴘ 10 ɢʀᴏᴜᴘs ʙʏ ᴅᴀɪʟʏ ɢʀᴏᴜᴘ ᴄᴏᴜɴᴛ."""
     cursor = top_global_groups_collection.aggregate([
-        {"$project": {"group_name": 1, "count": 1}},
-        {"$sort": {"count": -1}},
+        {
+            "$project": {
+                "group_name": 1,
+                "daily_group_count": {"$ifNull": ["$daily_group_count", 0]}
+            }
+        },
+        {"$match": {"daily_group_count": {"$gt": 0}}},
+        {"$sort": {"daily_group_count": -1}},
         {"$limit": 10}
     ])
     leaderboard_data = await cursor.to_list(length=10)
     
-    message = "👥 <b>ᴛᴏᴘ 10 ɢʀᴏᴜᴘs ʙʏ ᴄʜᴀʀᴀᴄᴛᴇʀ ɢᴜᴇssᴇs.</b>\n\n"
+    message = "👥 <b>TOP 10 GROUPS (DAILY)</b>\n\n"
     
     for i, group in enumerate(leaderboard_data, start=1):
         group_name = html.escape(group.get('group_name', 'Unknown'))
@@ -164,8 +171,8 @@ async def show_group_top() -> str:
         if len(display_name) > 20:
             display_name = display_name[:20] + '...'
         
-        count = group['count']
-        message += f'{i}. <b>{display_name}</b> ➾ <b>{count}</b>\n'
+        daily_group_count = group['daily_group_count']
+        message += f'{i}. <b>{display_name}</b> ➾ <b>{daily_group_count}</b>\n'
     
     return message
 
