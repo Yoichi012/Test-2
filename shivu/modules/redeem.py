@@ -1,12 +1,3 @@
-"""
-Redeem System for Telegram Bot
-Supports coin and character redeem codes with usage limits
-
-Database: Character_catcher
-Main Collection: anime_characters_lol (character data source)
-User Collection: user_collection_lmaoooo (user character storage)
-"""
-
 import secrets
 import string
 from typing import Optional, Dict, Any
