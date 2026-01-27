@@ -1,3 +1,12 @@
+"""
+Redeem System for Telegram Bot
+Supports coin and character redeem codes with usage limits
+
+Database: Character_catcher
+Main Collection: anime_characters_lol (character data source)
+User Collection: user_collection_lmaoooo (user character storage)
+"""
+
 import secrets
 import string
 from typing import Optional, Dict, Any
@@ -284,18 +293,7 @@ async def redeem_code(code: str, user_id: int) -> Dict[str, Any]:
             rarity = character.get("rarity", 1)
             img_url = character.get("img_url", "")
             
-            # Add character to user's collection
-            # Check if user already has this character
-            user_data = await user_collection.find_one({"id": user_id})
-            
-            is_duplicate = False
-            if user_data and "characters" in user_data:
-                # Check if character already exists in user's collection
-                existing_chars = [c.get("id") for c in user_data.get("characters", [])]
-                if character_id in existing_chars or str(character_id) in existing_chars:
-                    is_duplicate = True
-            
-            # Add character to collection
+            # Add character to user's collection (always add, even if duplicate)
             character_entry = {
                 "id": character_id,
                 "name": character_name,
@@ -332,17 +330,12 @@ async def redeem_code(code: str, user_id: int) -> Dict[str, Any]:
             rarity_display = get_rarity_display(rarity)
             
             # Build message
-            duplicate_note = ""
-            if is_duplicate:
-                duplicate_note = f"\n\n⚠️ {to_small_caps('Note: You already had this character!')}"
-            
             message = (
                 f"<b>✅ {to_small_caps('CHARACTER CODE REDEEMED!')}</b>\n\n"
                 f"🎴 <b>{to_small_caps('Character:')}</b> {escape(character_name)}\n"
                 f"📺 <b>{to_small_caps('Anime:')}</b> {escape(anime_name)}\n"
                 f"⭐ <b>{to_small_caps('Rarity:')}</b> {rarity_display}\n"
                 f"🎟️ {to_small_caps('Code:')} <code>{code}</code>"
-                f"{duplicate_note}"
             )
             
             return {
@@ -352,8 +345,7 @@ async def redeem_code(code: str, user_id: int) -> Dict[str, Any]:
                 "data": {
                     "type": "character",
                     "character_id": character_id,
-                    "character_name": character_name,
-                    "is_duplicate": is_duplicate
+                    "character_name": character_name
                 }
             }
         
