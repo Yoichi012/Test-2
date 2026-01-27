@@ -23,7 +23,7 @@ def to_small_caps(text):
     """Convert any string to Unicode Small Caps"""
     if not text:
         return ""
-    
+
     small_caps_map = {
         'A': 'ᴀ', 'B': 'ʙ', 'C': 'ᴄ', 'D': 'ᴅ', 'E': 'ᴇ', 'F': 'ꜰ', 'G': 'ɢ', 'H': 'ʜ',
         'I': 'ɪ', 'J': 'ᴊ', 'K': 'ᴋ', 'L': 'ʟ', 'M': 'ᴍ', 'N': 'ɴ', 'O': 'ᴏ', 'P': 'ᴘ',
@@ -55,9 +55,17 @@ async def inlinequery(update: Update, context: CallbackContext) -> None:
     query = update.inline_query.query
     offset = int(update.inline_query.offset) if update.inline_query.offset else 0
 
-    if query.startswith('collection.'):
-        user_id_str = query.split(' ')[0].split('.')[1]
-        search_terms = ' '.join(query.split(' ')[1:])
+    # FIXED: Support both formats - "collection.user_id" AND just "user_id"
+    # Check if query starts with "collection." OR is just a number (user_id)
+    if query.startswith('collection.') or (query.split()[0].isdigit() if query else False):
+        # Handle "collection.user_id search_terms" format
+        if query.startswith('collection.'):
+            user_id_str = query.split(' ')[0].split('.')[1]
+            search_terms = ' '.join(query.split(' ')[1:])
+        # Handle "user_id search_terms" format (new format from button)
+        else:
+            user_id_str = query.split(' ')[0]
+            search_terms = ' '.join(query.split(' ')[1:])
 
         if user_id_str.isdigit():
             user_id = int(user_id_str)
@@ -104,11 +112,11 @@ async def inlinequery(update: Update, context: CallbackContext) -> None:
 
         global_count = await user_collection.count_documents({'characters.id': character['id']})
         anime_characters = await collection.count_documents({'anime': character['anime']})
-        
+
         # --- Rarity Display Logic ---
         rarity_value = character.get('rarity')
         rarity_display = to_small_caps("ɴ/ᴀ")  # Default value
-        
+
         if rarity_value is not None:
             try:
                 # Check if rarity is an integer
@@ -126,14 +134,15 @@ async def inlinequery(update: Update, context: CallbackContext) -> None:
             except (ValueError, TypeError):
                 # Koi error aaye to default use karo
                 rarity_display = to_small_caps("ɴ/ᴀ")
-        
-        if query.startswith('collection.'):
+
+        # FIXED: Check both formats for user collection display
+        if query.startswith('collection.') or (query.split()[0].isdigit() if query else False):
             user_character_count = sum(1 for c in user['characters'] if c['id'] == character['id'])
             user_anime_characters = sum(1 for c in user['characters'] if c['anime'] == character['anime'])
-            
+
             # User name ko bhi small caps mein convert karo
             user_first_name = user.get('first_name', str(user['id']))
-            
+
             caption = f"✨ {to_small_caps('look at')} {to_small_caps(user_first_name)}'s {to_small_caps('character')}\n\n"
             caption += f"🌸{to_small_caps('name')} : <b>{to_small_caps(character['name'])} (x{user_character_count})</b>\n"
             caption += f"🏖️{to_small_caps('anime')} : <b>{to_small_caps(character['anime'])} ({user_anime_characters}/{anime_characters})</b>\n"
