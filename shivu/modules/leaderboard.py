@@ -56,7 +56,7 @@ async def leaderboard_entry(update: Update, context: CallbackContext) -> None:
     reply_markup = InlineKeyboardMarkup(keyboard)
     
     video_url = random.choice(VIDEO_URL)
-    caption = "📊 <b>Leaderboard Menu</b>\n\nᴄʜᴏᴏsᴇ ᴀ ʀᴀɴᴋɪɴɢ ᴛᴏ ᴠɪᴇᴡ:"
+    caption = "📊 <b>ʟᴇᴀᴅᴇʀʙᴏᴀʀᴅ ᴍᴇɴᴜ</b>\n\nᴄʜᴏᴏsᴇ ᴀ ʀᴀɴᴋɪɴɢ ᴛᴏ ᴠɪᴇᴡ:"
     
     await update.message.reply_video(
         video=video_url,
