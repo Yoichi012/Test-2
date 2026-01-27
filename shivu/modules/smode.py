@@ -123,7 +123,7 @@ async def smode_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     else:
         current_text = RARITY_OPTIONS.get(str(current_pref), {}).get("name", "Unknown")
     
-    # Create message with image
+    # Create message
     caption = (
         f"<b>⚙️ {to_small_caps('SORTING MODE')}</b>\n\n"
         f"📊 {to_small_caps('Current Filter:')} <b>{current_text}</b>\n\n"
@@ -131,7 +131,7 @@ async def smode_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         f"   {to_small_caps('Use /harem or /collection to see filtered results')}"
     )
     
-    # Create keyboard with rarity buttons (4 buttons per row)
+    # Create keyboard with rarity buttons (3 buttons per row)
     keyboard = []
     row = []
     
@@ -164,16 +164,16 @@ async def smode_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     
     reply_markup = InlineKeyboardMarkup(keyboard)
     
-    # Send image with caption and buttons
+    # Try to send image, fallback to text if fails
     try:
         await update.message.reply_photo(
-            photo="https://files.catbox.moe/g3rxr1.jpg",
+            photo=SMODE_IMAGE_URL,
             caption=caption,
             reply_markup=reply_markup,
             parse_mode="HTML"
         )
     except Exception as e:
-        LOGGER.error(f"Failed to send smode image: {e}")
+        LOGGER.warning(f"Failed to send smode image, using text fallback: {e}")
         # Fallback to text message
         await update.message.reply_text(
             caption,
@@ -209,7 +209,7 @@ async def smode_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     await set_user_sort_preference(user_id, rarity_filter)
     
     # Update message
-    caption = (
+    message_text = (
         f"<b>⚙️ {to_small_caps('SORTING MODE')}</b>\n\n"
         f"📊 {to_small_caps('Current Filter:')} <b>{selected_text}</b>\n\n"
         f"💡 {to_small_caps('Select a rarity to filter your harem:')}\n"
@@ -247,13 +247,23 @@ async def smode_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     
     reply_markup = InlineKeyboardMarkup(keyboard)
     
-    # Update the message
+    # Update the message - handle both photo and text messages
     try:
-        await query.edit_message_caption(
-            caption=caption,
-            reply_markup=reply_markup,
-            parse_mode="HTML"
-        )
+        # Check if message has photo (caption) or just text
+        if query.message.photo:
+            # It's a photo message, edit caption
+            await query.edit_message_caption(
+                caption=message_text,
+                reply_markup=reply_markup,
+                parse_mode="HTML"
+            )
+        else:
+            # It's a text message, edit text
+            await query.edit_message_text(
+                text=message_text,
+                reply_markup=reply_markup,
+                parse_mode="HTML"
+            )
     except Exception as e:
         LOGGER.error(f"Failed to update smode message: {e}")
     
