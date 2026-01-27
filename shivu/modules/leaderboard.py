@@ -9,7 +9,7 @@ from telegram.ext import CommandHandler, CallbackContext, CallbackQueryHandler
 
 from shivu import (
     application, VIDEO_URL, user_collection, top_global_groups_collection,
-    group_user_totals_collection
+    group_user_totals_collection, LOGGER
 )
 from motor.motor_asyncio import AsyncIOMotorDatabase
 
@@ -24,7 +24,7 @@ def to_small_caps(text: str) -> str:
         'a': 'ᴀ', 'b': 'ʙ', 'c': 'ᴄ', 'd': 'ᴅ', 'e': 'ᴇ', 'f': 'ꜰ',
         'g': 'ɢ', 'h': 'ʜ', 'i': 'ɪ', 'j': 'ᴊ', 'k': 'ᴋ', 'l': 'ʟ',
         'm': 'ᴍ', 'n': 'ɴ', 'o': 'ᴏ', 'p': 'ᴘ', 'q': 'ǫ', 'r': 'ʀ',
-        's': 's', 't': 'ᴛ', 'u': 'ᴜ', 'v': 'ᴠ', 'w': 'ᴡ', 'x': 'x',
+        's': 'ꜱ', 't': 'ᴛ', 'u': 'ᴜ', 'v': 'ᴠ', 'w': 'ᴡ', 'x': 'x',
         'y': 'ʏ', 'z': 'ᴢ'
     }
 
@@ -83,6 +83,11 @@ async def update_daily_user_guess(user_id: int, username: str = "", first_name: 
     """
     try:
         today = get_ist_date()
+        
+        # Safely handle None values
+        safe_username = username if username else ""
+        safe_first_name = first_name if first_name else "Unknown"
+        
         await daily_user_guesses_collection.update_one(
             {
                 "date": today,
@@ -91,8 +96,8 @@ async def update_daily_user_guess(user_id: int, username: str = "", first_name: 
             {
                 "$inc": {"count": 1},
                 "$set": {
-                    "username": username,
-                    "first_name": first_name,
+                    "username": safe_username,
+                    "first_name": safe_first_name,
                     "last_updated": get_ist_datetime()
                 },
                 "$setOnInsert": {
@@ -102,8 +107,9 @@ async def update_daily_user_guess(user_id: int, username: str = "", first_name: 
             },
             upsert=True
         )
+        LOGGER.info(f"✅ Daily user guess updated: user_id={user_id}, date={today}")
     except Exception as e:
-        print(f"Error updating daily user guess for user_id {user_id}: {e}")
+        LOGGER.error(f"❌ Error updating daily user guess for user_id {user_id}: {e}")
 
 
 async def update_daily_group_guess(group_id: int, group_name: str = "") -> None:
@@ -113,6 +119,10 @@ async def update_daily_group_guess(group_id: int, group_name: str = "") -> None:
     """
     try:
         today = get_ist_date()
+        
+        # Safely handle None values
+        safe_group_name = group_name if group_name else "Unknown Group"
+        
         await daily_group_guesses_collection.update_one(
             {
                 "date": today,
@@ -121,7 +131,7 @@ async def update_daily_group_guess(group_id: int, group_name: str = "") -> None:
             {
                 "$inc": {"count": 1},
                 "$set": {
-                    "group_name": group_name,
+                    "group_name": safe_group_name,
                     "last_updated": get_ist_datetime()
                 },
                 "$setOnInsert": {
@@ -131,9 +141,14 @@ async def update_daily_group_guess(group_id: int, group_name: str = "") -> None:
             },
             upsert=True
         )
+        LOGGER.info(f"✅ Daily group guess updated: group_id={group_id}, date={today}")
     except Exception as e:
-        print(f"Error updating daily group guess for group_id {group_id}: {e}")
+        LOGGER.error(f"❌ Error updating daily group guess for group_id {group_id}: {e}")
 
+
+# ============================================================================
+# LEADERBOARD DISPLAY FUNCTIONS
+# ============================================================================
 
 async def leaderboard_entry(update: Update, context: CallbackContext) -> None:
     """Main leaderboard entry point with inline buttons."""
@@ -150,7 +165,6 @@ async def leaderboard_entry(update: Update, context: CallbackContext) -> None:
     reply_markup = InlineKeyboardMarkup(keyboard)
 
     video_url = random.choice(VIDEO_URL)
-    caption = "📊 <b>ʟᴇᴀᴅᴇʀʙᴏᴀʀᴅ ᴍᴇɴᴜ</b>\n\nᴄʜᴏᴏᴇ ᴀ ʀᴀɴᴋɪɴɢ ᴛᴏ ᴠɪᴇᴡ:"
     caption = "📊 <b>ʟᴇᴀᴅᴇʀʙᴏᴀʀᴅ ᴍᴇɴᴜ</b>\n\nᴄʜᴏᴏꜱᴇ ᴀ ʀᴀɴᴋɪɴɢ ᴛᴏ ᴠɪᴇᴡ:"
 
     await update.message.reply_video(
@@ -163,64 +177,65 @@ async def leaderboard_entry(update: Update, context: CallbackContext) -> None:
 
 async def show_char_top() -> str:
     """sʜᴏᴡ ᴛᴏᴘ 10 ᴜsᴇʀs ʙʏ ᴄʜᴀʀᴀᴄᴛᴇʀ ᴄᴏᴜɴᴛ."""
-    cursor = user_collection.aggregate([
-        {
-            "$project": {
-                "username": 1,
-                "first_name": 1,
-                "character_count": {"$size": "$characters"}
-            }
-        },
-        {"$sort": {"character_count": -1}},
-        {"$limit": 10}
-    ])
-    leaderboard_data = await cursor.to_list(length=10)
+    try:
+        cursor = user_collection.aggregate([
+            {
+                "$project": {
+                    "username": 1,
+                    "first_name": 1,
+                    "character_count": {"$size": "$characters"}
+                }
+            },
+            {"$sort": {"character_count": -1}},
+            {"$limit": 10}
+        ])
+        leaderboard_data = await cursor.to_list(length=10)
 
-    message = "🏆 <b>ᴛᴏᴘ 10 ᴜsᴇʀs ᴡɪᴛʜ ᴍᴏsᴛ ᴄʜᴀʀᴀᴄᴛᴇʀs</b>\n\n"
+        message = "🏆 <b>ᴛᴏᴘ 10 ᴜsᴇʀs ᴡɪᴛʜ ᴍᴏsᴛ ᴄʜᴀʀᴀᴄᴛᴇʀs</b>\n\n"
 
-    for i, user in enumerate(leaderboard_data, start=1):
-        username = user.get('username', '')
-        first_name = html.escape(user.get('first_name', 'Unknown'))
+        if not leaderboard_data:
+            return message + "ɴᴏ ᴅᴀᴛᴀ ᴀᴠᴀɪʟᴀʙʟᴇ ʏᴇᴛ!"
 
-        # Convert to small caps
-        display_name = to_small_caps(first_name)
+        for i, user in enumerate(leaderboard_data, start=1):
+            username = user.get('username', '')
+            first_name = html.escape(user.get('first_name', 'Unknown'))
 
-        if len(display_name) > 15:
-            display_name = display_name[:15] + '...'
+            # Convert to small caps
+            display_name = to_small_caps(first_name)
 
-        character_count = user['character_count']
+            if len(display_name) > 15:
+                display_name = display_name[:15] + '...'
 
-        if username:
-            message += f'{i}. <a href="https://t.me/{username}"><b>{display_name}</b></a> ➾ <b>{character_count}</b>\n'
-        else:
-            message += f'{i}. <b>{display_name}</b> ➾ <b>{character_count}</b>\n'
+            character_count = user['character_count']
 
-    return message
+            if username:
+                message += f'{i}. <a href="https://t.me/{username}"><b>{display_name}</b></a> ➾ <b>{character_count}</b>\n'
+            else:
+                message += f'{i}. <b>{display_name}</b> ➾ <b>{character_count}</b>\n'
+
+        return message
+    except Exception as e:
+        LOGGER.exception(f"Error in show_char_top: {e}")
+        return "❌ <b>ᴇʀʀᴏʀ ʟᴏᴀᴅɪɴɢ ʟᴇᴀᴅᴇʀʙᴏᴀʀᴅ</b>"
 
 
 async def show_coin_top() -> str:
     """sʜᴏᴡ ᴛᴏᴘ 10 ᴜsᴇʀs ʙʏ ᴄᴏɪɴ ʙᴀʟᴀɴᴄᴇ."""
-    # Get database instance (assuming it's available in context)
-    db: AsyncIOMotorDatabase = user_collection.database
-    user_balance_collection = db.get_collection('user_balance')
+    try:
+        # Get top 10 users by balance directly from user_collection
+        cursor = user_collection.aggregate([
+            {"$sort": {"balance": -1}},
+            {"$limit": 10}
+        ])
+        coin_data = await cursor.to_list(length=10)
 
-    # Aggregate to get top 10 users by balance
-    cursor = user_balance_collection.aggregate([
-        {"$sort": {"balance": -1}},
-        {"$limit": 10}
-    ])
-    coin_data = await cursor.to_list(length=10)
+        message = "💰 <b>ᴛᴏᴘ 10 ʀɪᴄʜᴇsᴛ ᴜsᴇʀs</b>\n\n"
 
-    message = "💰 <b>ᴛᴏᴘ 10 ʀɪᴄʜᴇsᴛ ᴜsᴇʀs</b>\n\n"
+        if not coin_data:
+            return message + "ɴᴏ ᴅᴀᴛᴀ ᴀᴠᴀɪʟᴀʙʟᴇ ʏᴇᴛ!"
 
-    for i, coin_user in enumerate(coin_data, start=1):
-        user_id = coin_user['user_id']
-        balance = coin_user.get('balance', 0)
-
-        # Fetch user details from user_collection
-        user_data = await user_collection.find_one({"id": user_id})
-
-        if user_data:
+        for i, user_data in enumerate(coin_data, start=1):
+            balance = user_data.get('balance', 0)
             username = user_data.get('username', '')
             first_name = html.escape(user_data.get('first_name', 'Unknown'))
             display_name = to_small_caps(first_name)
@@ -232,79 +247,86 @@ async def show_coin_top() -> str:
                 message += f'{i}. <a href="https://t.me/{username}"><b>{display_name}</b></a> ➾ <b>{balance} coins</b>\n'
             else:
                 message += f'{i}. <b>{display_name}</b> ➾ <b>{balance} coins</b>\n'
-        else:
-            # Fallback if user not found
-            display_name = to_small_caps(f"User {user_id}")
-            message += f'{i}. <b>{display_name}</b> ➾ <b>{balance} coins</b>\n'
 
-    return message
+        return message
+    except Exception as e:
+        LOGGER.exception(f"Error in show_coin_top: {e}")
+        return "❌ <b>ᴇʀʀᴏʀ ʟᴏᴀᴅɪɴɢ ʟᴇᴀᴅᴇʀʙᴏᴀʀᴅ</b>"
 
 
 async def show_group_top() -> str:
     """sʜᴏᴡ ᴛᴏᴘ 10 ɢʀᴏᴜᴘs ʙʏ ᴄʜᴀʀᴀᴄᴛᴇʀ ɢᴜᴇssᴇs (TODAY - IST)."""
-    today = get_ist_date()
+    try:
+        today = get_ist_date()
 
-    # Query daily group guesses for today
-    cursor = daily_group_guesses_collection.aggregate([
-        {"$match": {"date": today}},
-        {"$sort": {"count": -1}},
-        {"$limit": 10}
-    ])
+        # Query daily group guesses for today
+        cursor = daily_group_guesses_collection.aggregate([
+            {"$match": {"date": today}},
+            {"$sort": {"count": -1}},
+            {"$limit": 10}
+        ])
 
-    daily_data = await cursor.to_list(length=10)
+        daily_data = await cursor.to_list(length=10)
 
-    if not daily_data:
-        return "👥 <b>ᴛᴏᴘ 10 ɢʀᴏᴜᴘs ʙʏ ᴄʜᴀʀᴀᴄᴛᴇʀ ɢᴜᴇssᴇs (ᴛᴏᴅᴀʏ)</b>\n\nɴᴏ ɢᴜᴇssᴇs ᴛᴏᴅᴀʏ ʏᴇᴛ!"
+        if not daily_data:
+            return f"👥 <b>ᴛᴏᴘ 10 ɢʀᴏᴜᴘs ʙʏ ᴄʜᴀʀᴀᴄᴛᴇʀ ɢᴜᴇssᴇs (ᴛᴏᴅᴀʏ)</b>\n📅 <i>{today}</i>\n\nɴᴏ ɢᴜᴇssᴇs ᴛᴏᴅᴀʏ ʏᴇᴛ!"
 
-    message = "👥 <b>ᴛᴏᴘ 10 ɢʀᴏᴜᴘs ʙʏ ᴄʜᴀʀᴀᴄᴛᴇʀ ɢᴜᴇssᴇs (ᴛᴏᴅᴀʏ)</b>\n\n"
+        message = f"👥 <b>ᴛᴏᴘ 10 ɢʀᴏᴜᴘs ʙʏ ᴄʜᴀʀᴀᴄᴛᴇʀ ɢᴜᴇssᴇs (ᴛᴏᴅᴀʏ)</b>\n📅 <i>{today}</i>\n\n"
 
-    for i, group in enumerate(daily_data, start=1):
-        group_name = html.escape(group.get('group_name', 'Unknown'))
-        display_name = to_small_caps(group_name)
+        for i, group in enumerate(daily_data, start=1):
+            group_name = html.escape(group.get('group_name', 'Unknown'))
+            display_name = to_small_caps(group_name)
 
-        if len(display_name) > 20:
-            display_name = display_name[:20] + '...'
+            if len(display_name) > 20:
+                display_name = display_name[:20] + '...'
 
-        count = group.get('count', 0)
-        message += f'{i}. <b>{display_name}</b> ➾ <b>{count}</b>\n'
+            count = group.get('count', 0)
+            message += f'{i}. <b>{display_name}</b> ➾ <b>{count}</b>\n'
 
-    return message
+        return message
+    except Exception as e:
+        LOGGER.exception(f"Error in show_group_top: {e}")
+        return "❌ <b>ᴇʀʀᴏʀ ʟᴏᴀᴅɪɴɢ ʟᴇᴀᴅᴇʀʙᴏᴀʀᴅ</b>"
 
 
 async def show_group_user_top(chat_id: Optional[int] = None) -> str:
     """sʜᴏᴡ ᴛᴏᴘ 10 ᴜsᴇʀs ʙʏ ᴄᴏʀʀᴇᴄᴛ ɢᴜᴇssᴇs (TODAY - IST)."""
-    today = get_ist_date()
+    try:
+        today = get_ist_date()
 
-    # Query daily user guesses for today
-    cursor = daily_user_guesses_collection.aggregate([
-        {"$match": {"date": today}},
-        {"$sort": {"count": -1}},
-        {"$limit": 10}
-    ])
+        # Query daily user guesses for today
+        cursor = daily_user_guesses_collection.aggregate([
+            {"$match": {"date": today}},
+            {"$sort": {"count": -1}},
+            {"$limit": 10}
+        ])
 
-    daily_data = await cursor.to_list(length=10)
+        daily_data = await cursor.to_list(length=10)
 
-    if not daily_data:
-        return "⏳ <b>ᴛᴏᴘ 10 ᴜsᴇʀs ʙʏ ᴄᴏʀʀᴇᴄᴛ ɢᴜᴇssᴇs (ᴛᴏᴅᴀʏ)</b>\n\nɴᴏ ɢᴜᴇssᴇs ᴛᴏᴅᴀʏ ʏᴇᴛ!"
+        if not daily_data:
+            return f"⏳ <b>ᴛᴏᴘ 10 ᴜsᴇʀs ʙʏ ᴄᴏʀʀᴇᴄᴛ ɢᴜᴇssᴇs (ᴛᴏᴅᴀʏ)</b>\n📅 <i>{today}</i>\n\nɴᴏ ɢᴜᴇssᴇs ᴛᴏᴅᴀʏ ʏᴇᴛ!"
 
-    message = "⏳ <b>ᴛᴏᴘ 10 ᴜsᴇʀs ʙʏ ᴄᴏʀʀᴇᴄᴛ ɢᴜᴇssᴇs (ᴛᴏᴅᴀʏ)</b>\n\n"
+        message = f"⏳ <b>ᴛᴏᴘ 10 ᴜsᴇʀs ʙʏ ᴄᴏʀʀᴇᴄᴛ ɢᴜᴇssᴇs (ᴛᴏᴅᴀʏ)</b>\n📅 <i>{today}</i>\n\n"
 
-    for i, user in enumerate(daily_data, start=1):
-        username = user.get('username', '')
-        first_name = html.escape(user.get('first_name', 'Unknown'))
-        display_name = to_small_caps(first_name)
+        for i, user in enumerate(daily_data, start=1):
+            username = user.get('username', '')
+            first_name = html.escape(user.get('first_name', 'Unknown'))
+            display_name = to_small_caps(first_name)
 
-        if len(display_name) > 15:
-            display_name = display_name[:15] + '...'
+            if len(display_name) > 15:
+                display_name = display_name[:15] + '...'
 
-        count = user.get('count', 0)
+            count = user.get('count', 0)
 
-        if username:
-            message += f'{i}. <a href="https://t.me/{username}"><b>{display_name}</b></a> ➾ <b>{count}</b>\n'
-        else:
-            message += f'{i}. <b>{display_name}</b> ➾ <b>{count}</b>\n'
+            if username:
+                message += f'{i}. <a href="https://t.me/{username}"><b>{display_name}</b></a> ➾ <b>{count}</b>\n'
+            else:
+                message += f'{i}. <b>{display_name}</b> ➾ <b>{count}</b>\n'
 
-    return message
+        return message
+    except Exception as e:
+        LOGGER.exception(f"Error in show_group_user_top: {e}")
+        return "❌ <b>ᴇʀʀᴏʀ ʟᴏᴀᴅɪɴɢ ʟᴇᴀᴅᴇʀʙᴏᴀʀᴅ</b>"
 
 
 async def leaderboard_callback(update: Update, context: CallbackContext) -> None:
@@ -328,35 +350,39 @@ async def leaderboard_callback(update: Update, context: CallbackContext) -> None
     ]
 
     # Back button keyboard for individual views
-    back_keyboard = [[InlineKeyboardButton("🔙 Back", callback_data="leaderboard_main")]]
+    back_keyboard = [[InlineKeyboardButton("🔙 ʙᴀᴄᴋ", callback_data="leaderboard_main")]]
 
-    if data == "leaderboard_main":
-        # Return to main menu
-        caption = "📊 <b>Leaderboard Menu</b>\n\nChoose a ranking to view:"
-        reply_markup = InlineKeyboardMarkup(main_keyboard)
-        await query.edit_message_caption(caption=caption, parse_mode='HTML', reply_markup=reply_markup)
+    try:
+        if data == "leaderboard_main":
+            # Return to main menu
+            caption = "📊 <b>ʟᴇᴀᴅᴇʀʙᴏᴀʀᴅ ᴍᴇɴᴜ</b>\n\nᴄʜᴏᴏꜱᴇ ᴀ ʀᴀɴᴋɪɴɢ ᴛᴏ ᴠɪᴇᴡ:"
+            reply_markup = InlineKeyboardMarkup(main_keyboard)
+            await query.edit_message_caption(caption=caption, parse_mode='HTML', reply_markup=reply_markup)
 
-    elif data == "leaderboard_char":
-        message = await show_char_top()
-        reply_markup = InlineKeyboardMarkup(back_keyboard)
-        await query.edit_message_caption(caption=message, parse_mode='HTML', reply_markup=reply_markup)
+        elif data == "leaderboard_char":
+            message = await show_char_top()
+            reply_markup = InlineKeyboardMarkup(back_keyboard)
+            await query.edit_message_caption(caption=message, parse_mode='HTML', reply_markup=reply_markup)
 
-    elif data == "leaderboard_coin":
-        message = await show_coin_top()
-        reply_markup = InlineKeyboardMarkup(back_keyboard)
-        await query.edit_message_caption(caption=message, parse_mode='HTML', reply_markup=reply_markup)
+        elif data == "leaderboard_coin":
+            message = await show_coin_top()
+            reply_markup = InlineKeyboardMarkup(back_keyboard)
+            await query.edit_message_caption(caption=message, parse_mode='HTML', reply_markup=reply_markup)
 
-    elif data == "leaderboard_group":
-        message = await show_group_top()
-        reply_markup = InlineKeyboardMarkup(back_keyboard)
-        await query.edit_message_caption(caption=message, parse_mode='HTML', reply_markup=reply_markup)
+        elif data == "leaderboard_group":
+            message = await show_group_top()
+            reply_markup = InlineKeyboardMarkup(back_keyboard)
+            await query.edit_message_caption(caption=message, parse_mode='HTML', reply_markup=reply_markup)
 
-    elif data == "leaderboard_group_user":
-        # Note: The daily user leaderboard is now GLOBAL (not per group)
-        # Always show global daily user guesses regardless of chat type
-        message = await show_group_user_top()
-        reply_markup = InlineKeyboardMarkup(back_keyboard)
-        await query.edit_message_caption(caption=message, parse_mode='HTML', reply_markup=reply_markup)
+        elif data == "leaderboard_group_user":
+            # Note: The daily user leaderboard is now GLOBAL (not per group)
+            # Always show global daily user guesses regardless of chat type
+            message = await show_group_user_top()
+            reply_markup = InlineKeyboardMarkup(back_keyboard)
+            await query.edit_message_caption(caption=message, parse_mode='HTML', reply_markup=reply_markup)
+    except Exception as e:
+        LOGGER.exception(f"Error in leaderboard_callback: {e}")
+        await query.answer("❌ Error loading leaderboard", show_alert=True)
 
 
 # Add handlers
