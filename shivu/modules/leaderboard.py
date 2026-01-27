@@ -221,15 +221,11 @@ async def show_char_top() -> str:
 
 async def show_coin_top() -> str:
     """
-    sʜᴏᴡ ᴛᴏᴘ 10 ᴜsᴇʀs ʙʏ ᴄᴏɪɴ ʙᴀʟᴀɴᴄᴇ.
-    
-    NOTE: This function is CORRECT and fetches balance directly from user_collection.
-    The balance field is updated by change_balance() function in main.py when users guess correctly.
-    If balances aren't showing, the issue is in change_balance() function, NOT here.
+    ✅ CORRECT: Shows top 10 users by coin balance from user_collection.
+    This function reads from the SAME collection where main.py now stores balance.
     """
     try:
-        # CORRECT: Fetch top 10 users by balance from user_collection
-        # This is where main.py stores balance via change_balance()
+        # ✅ CORRECT: Fetch top 10 users by balance from user_collection
         cursor = user_collection.aggregate([
             {"$sort": {"balance": -1}},
             {"$limit": 10}
@@ -242,7 +238,7 @@ async def show_coin_top() -> str:
             return message + "ɴᴏ ᴅᴀᴛᴀ ᴀᴠᴀɪʟᴀʙʟᴇ ʏᴇᴛ!"
 
         for i, user_data in enumerate(coin_data, start=1):
-            # CORRECT: Get balance field from user document
+            # ✅ CORRECT: Get balance field from user document
             balance = user_data.get('balance', 0)
             username = user_data.get('username', '')
             first_name = html.escape(user_data.get('first_name', 'Unknown'))
