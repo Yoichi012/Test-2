@@ -209,17 +209,16 @@ class Character:
         }
 
     def get_caption(self, action: str = "Added") -> str:
-        """Generate caption for channel post"""
+        """Generate caption for channel post - New Format"""
         rarity_obj = RarityLevel.from_number(self.rarity)
         display_name = rarity_obj.display_name if rarity_obj else f"Level {self.rarity}"
         
         return (
-            f"<b>{action}✨</b>\n\n"
-            f"<b>🆔 ɪᴅ:</b> <code>{self.character_id}</code>\n"
-            f"<b>🏷️ ɴᴀᴍᴇ:</b> <code>{self.name}</code>\n"
-            f"<b>📺 ᴀɴɪᴍᴇ:</b> <code>{self.anime}</code>\n"
-            f"<b>💎 ʀᴀʀɪᴛʏ:</b> <code>{display_name}</code>\n"
-            f"<b>👤 ᴜᴘʟᴏᴀᴅᴇʀ:</b> <code>{self.uploader_name}</code>"
+            f"⎔ 𝙉𝙖𝙢𝙚     : {self.name}\n"
+            f"⎔ 𝘼𝙣𝙞𝙢𝙚    : {self.anime}\n"
+            f"⎔ 𝙍𝙖𝙧𝙞𝙩𝙮   : {display_name}\n"
+            f"⎔ 𝙄𝘿       : {self.character_id}\n\n"
+            f"⎆ 𝙈𝙖𝙙𝙚 𝙗𝙮 : {self.uploader_name}"
         )
 
 
