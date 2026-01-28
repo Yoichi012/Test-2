@@ -5,7 +5,13 @@ from pymongo import ReturnDocument
 from telegram import Update
 from telegram.ext import CommandHandler, CallbackContext
 
-from shivu import application, sudo_users, collection, db, CHARA_CHANNEL_ID, SUPPORT_CHAT
+from shivu import application, collection, db
+from shivu.config import Config
+
+# Extract configuration values
+sudo_users = [str(user_id) for user_id in Config.SUDO_USERS]
+CHARA_CHANNEL_ID = Config.CHARA_CHANNEL_ID
+SUPPORT_CHAT = Config.SUPPORT_CHAT
 
 # Updated Rarity Map (1-15)
 RARITY_MAP = {
