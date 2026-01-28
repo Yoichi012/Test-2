@@ -1,11 +1,3 @@
-"""
-Sorting Mode System for Telegram Bot
-Users can filter their harem/collection by rarity
-
-Usage: /smode - Opens rarity selection menu
-       /harem or /collection - Shows filtered collection based on selected rarity
-"""
-
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import CommandHandler, CallbackQueryHandler, ContextTypes
 
@@ -90,21 +82,80 @@ async def get_filtered_characters(user_id: int):
     user_data = await user_collection.find_one({"id": user_id})
     if not user_data or "characters" not in user_data:
         return [], None, 0
-    
+
     all_characters = user_data.get("characters", [])
     total_count = len(all_characters)
-    
+
     # Get user's filter preference
     rarity_filter = await get_user_sort_preference(user_id)
-    
+
     # If no filter, return all
     if rarity_filter is None:
         return all_characters, None, total_count
-    
+
     # Filter by rarity
     filtered = [char for char in all_characters if char.get("rarity") == rarity_filter]
-    
+
     return filtered, rarity_filter, total_count
+
+
+# ---------- Helper Function to Create Main Menu Keyboard ----------
+def create_smode_keyboard(current_pref):
+    """Create the main smode menu keyboard with all rarity options."""
+    keyboard = []
+    row = []
+
+    # Add "All Rarities" button first (DEFAULT)
+    row.append(InlineKeyboardButton(
+        to_small_caps("🍃 default") + (" ✓" if current_pref is None else ""),
+        callback_data="smode_all"
+    ))
+    keyboard.append(row)
+
+    # Add rarity buttons (ALL IN SMALL CAPS)
+    row = []
+    for i, (key, data) in enumerate(list(RARITY_OPTIONS.items())[1:], 1):  # Skip "all"
+        is_selected = (current_pref == data["value"])
+        # Convert button text to small caps
+        button_text = to_small_caps(data["name"]) + (" ✓" if is_selected else "")
+
+        row.append(InlineKeyboardButton(
+            button_text,
+            callback_data=f"smode_{key}"
+        ))
+
+        # 3 buttons per row
+        if i % 3 == 0:
+            keyboard.append(row)
+            row = []
+
+    # Add remaining buttons
+    if row:
+        keyboard.append(row)
+
+    # Add Cancel button at the end
+    keyboard.append([
+        InlineKeyboardButton(
+            "❌ " + to_small_caps("Cancel"),
+            callback_data="smode_cancel"
+        )
+    ])
+
+    return keyboard
+
+
+# ---------- Helper Function to Create Confirmation Keyboard ----------
+def create_confirmation_keyboard(user_id: int):
+    """Create keyboard with only Back to Menu button after selection."""
+    keyboard = [
+        [
+            InlineKeyboardButton(
+                "🔙 " + to_small_caps("Back to Menu"),
+                callback_data=f"smode_backmenu:{user_id}"
+            )
+        ]
+    ]
+    return keyboard
 
 
 # ---------- Command Handlers ----------
@@ -113,65 +164,27 @@ async def smode_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     /smode command - Opens sorting mode menu with rarity options
     """
     user_id = update.effective_user.id
-    
+
     # Get current preference
     current_pref = await get_user_sort_preference(user_id)
-    
+
     # Determine current selection text
     if current_pref is None:
         current_text = " " + to_small_caps("All Rarities")
     else:
         rarity_info = RARITY_OPTIONS.get(str(current_pref), {})
         current_text = rarity_info.get("name", "Unknown")
-    
+
     # Create message with premium emojis
     caption = (
         f"<b>✨ {to_small_caps('SMODE')}</b>\n\n"
         f"🎯 {to_small_caps('Current Model:')} <b>{current_text}</b>\n"
     )
-    
-    # Create keyboard with rarity buttons (3 buttons per row) - ALL IN SMALL CAPS
-    keyboard = []
-    row = []
-    
-    # Add "All Rarities" button first (DEFAULT)
-    row.append(InlineKeyboardButton(
-        to_small_caps("🍃 default") + (" ✓" if current_pref is None else ""),
-        callback_data="smode_all"
-    ))
-    keyboard.append(row)
-    
-    # Add rarity buttons (ALL IN SMALL CAPS)
-    row = []
-    for i, (key, data) in enumerate(list(RARITY_OPTIONS.items())[1:], 1):  # Skip "all"
-        is_selected = (current_pref == data["value"])
-        # Convert button text to small caps
-        button_text = to_small_caps(data["name"]) + (" ✓" if is_selected else "")
-        
-        row.append(InlineKeyboardButton(
-            button_text,
-            callback_data=f"smode_{key}"
-        ))
-        
-        # 3 buttons per row
-        if i % 3 == 0:
-            keyboard.append(row)
-            row = []
-    
-    # Add remaining buttons
-    if row:
-        keyboard.append(row)
-    
-    # Add Cancel button at the end
-    keyboard.append([
-        InlineKeyboardButton(
-            "❌ " + to_small_caps("Cancel"),
-            callback_data="smode_cancel"
-        )
-    ])
-    
+
+    # Create keyboard
+    keyboard = create_smode_keyboard(current_pref)
     reply_markup = InlineKeyboardMarkup(keyboard)
-    
+
     # Try to send image, fallback to text if fails
     try:
         await update.message.reply_photo(
@@ -193,18 +206,73 @@ async def smode_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 async def smode_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Handle rarity selection button callbacks"""
     query = update.callback_query
-    
     user_id = query.from_user.id
     data = query.data
-    
+
     # Handle cancel button
     if data == "smode_cancel":
         await query.answer("🚫 Cancelled", show_alert=False)
         await query.message.delete()
         return
-    
+
+    # Handle back to menu button
+    if data.startswith("smode_backmenu:"):
+        try:
+            _, callback_user_id = data.split(':')
+            callback_user_id = int(callback_user_id)
+            
+            # Verify it's the same user
+            if user_id != callback_user_id:
+                await query.answer("This is not your menu!", show_alert=True)
+                return
+                
+            await query.answer()
+            
+            # Get current preference
+            current_pref = await get_user_sort_preference(user_id)
+            
+            # Determine current selection text
+            if current_pref is None:
+                current_text = "🍃 " + to_small_caps("default")
+            else:
+                rarity_info = RARITY_OPTIONS.get(str(current_pref), {})
+                current_text = rarity_info.get("name", "Unknown")
+            
+            # Create message
+            message_text = (
+                f"<b>✨ {to_small_caps('SMODE')}</b>\n\n"
+                f"🎯 {to_small_caps('Current Model:')} <b>{current_text}</b>\n"
+            )
+            
+            # Create keyboard with all options
+            keyboard = create_smode_keyboard(current_pref)
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            
+            # Update the message
+            try:
+                if query.message.photo:
+                    await query.edit_message_caption(
+                        caption=message_text,
+                        reply_markup=reply_markup,
+                        parse_mode="HTML"
+                    )
+                else:
+                    await query.edit_message_text(
+                        text=message_text,
+                        reply_markup=reply_markup,
+                        parse_mode="HTML"
+                    )
+            except Exception as e:
+                LOGGER.error(f"Failed to update smode message: {e}")
+                
+            return
+            
+        except (ValueError, IndexError):
+            await query.answer("Invalid request", show_alert=True)
+            return
+
     await query.answer()
-    
+
     # Extract rarity from callback data
     if data == "smode_all":
         rarity_filter = None
@@ -212,75 +280,38 @@ async def smode_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     else:
         rarity_key = data.replace("smode_", "")
         rarity_info = RARITY_OPTIONS.get(rarity_key)
-        
+
         if not rarity_info:
             await query.answer("❌ Invalid selection!", show_alert=True)
             return
-        
+
         rarity_filter = rarity_info["value"]
         selected_text = rarity_info["name"]
-    
+
     # Save preference
     await set_user_sort_preference(user_id, rarity_filter)
-    
-    # Update message
+
+    # Create confirmation message
     message_text = (
         f"<b>✨ {to_small_caps('SMODE')}</b>\n\n"
-        f"🎯 {to_small_caps('Current Model:')} <b>{selected_text}</b>\n"
+        f"✅ {to_small_caps('Filter Applied!')}\n\n"
+        f"🎯 {to_small_caps('Selected:')} <b>{selected_text}</b>\n\n"
+        f"💡 {to_small_caps('Your harem will now show only')} <b>{selected_text}</b> {to_small_caps('characters.')}\n"
     )
-    
-    # Recreate keyboard with updated selection (ALL IN SMALL CAPS)
-    keyboard = []
-    row = []
-    
-    # Add "All Rarities" button
-    row.append(InlineKeyboardButton(
-        to_small_caps("🍃 default") + (" ✓" if rarity_filter is None else ""),
-        callback_data="smode_all"
-    ))
-    keyboard.append(row)
-    
-    # Add rarity buttons (ALL IN SMALL CAPS)
-    row = []
-    for i, (key, rarity_data) in enumerate(list(RARITY_OPTIONS.items())[1:], 1):
-        is_selected = (rarity_filter == rarity_data["value"])
-        # Convert to small caps
-        button_text = to_small_caps(rarity_data["name"]) + (" ✓" if is_selected else "")
-        
-        row.append(InlineKeyboardButton(
-            button_text,
-            callback_data=f"smode_{key}"
-        ))
-        
-        if i % 3 == 0:
-            keyboard.append(row)
-            row = []
-    
-    if row:
-        keyboard.append(row)
-    
-    # Add Cancel button
-    keyboard.append([
-        InlineKeyboardButton(
-            "❌ " + to_small_caps("Cancel"),
-            callback_data="smode_cancel"
-        )
-    ])
-    
+
+    # Create keyboard with only Back to Menu button
+    keyboard = create_confirmation_keyboard(user_id)
     reply_markup = InlineKeyboardMarkup(keyboard)
-    
-    # Update the message - handle both photo and text messages
+
+    # Update the message
     try:
-        # Check if message has photo (caption) or just text
         if query.message.photo:
-            # It's a photo message, edit caption
             await query.edit_message_caption(
                 caption=message_text,
                 reply_markup=reply_markup,
                 parse_mode="HTML"
             )
         else:
-            # It's a text message, edit text
             await query.edit_message_text(
                 text=message_text,
                 reply_markup=reply_markup,
@@ -288,7 +319,7 @@ async def smode_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             )
     except Exception as e:
         LOGGER.error(f"Failed to update smode message: {e}")
-    
+
     # Show notification
     await query.answer(f"✅ Filter set to: {selected_text}", show_alert=False)
 
@@ -296,7 +327,7 @@ async def smode_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 async def open_smode_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Handle opening smode from harem page"""
     query = update.callback_query
-    
+
     # Parse user_id from callback data
     try:
         _, user_id = query.data.split(':')
@@ -304,75 +335,39 @@ async def open_smode_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
     except (ValueError, TypeError):
         await query.answer("Invalid request", show_alert=True)
         return
-    
+
     # Check if user owns this harem
     if query.from_user.id != user_id:
         await query.answer("This is not your harem!", show_alert=True)
         return
-    
+
     await query.answer()
-    
+
     # Get current preference
     current_pref = await get_user_sort_preference(user_id)
-    
+
     # Determine current selection text
     if current_pref is None:
         current_text = "🍃 " + to_small_caps("default")
     else:
         rarity_info = RARITY_OPTIONS.get(str(current_pref), {})
         current_text = rarity_info.get("name", "Unknown")
-    
+
     # Create message with premium emojis
     caption = (
         f"<b>✨ {to_small_caps('SMODE')}</b>\n\n"
         f"🎯 {to_small_caps('Current Model:')} <b>{current_text}</b>\n"
     )
-    
-    # Create keyboard with rarity buttons (ALL IN SMALL CAPS)
-    keyboard = []
-    row = []
-    
-    # Add "All Rarities" button first
-    row.append(InlineKeyboardButton(
-        to_small_caps("🍃 default"s") + (" ✓" if current_pref is None else ""),
-        callback_data="smode_all"
-    ))
-    keyboard.append(row)
-    
-    # Add rarity buttons (ALL IN SMALL CAPS)
-    row = []
-    for i, (key, data) in enumerate(list(RARITY_OPTIONS.items())[1:], 1):
-        is_selected = (current_pref == data["value"])
-        # Convert to small caps
-        button_text = to_small_caps(data["name"]) + (" ✓" if is_selected else "")
-        
-        row.append(InlineKeyboardButton(
-            button_text,
-            callback_data=f"smode_{key}"
-        ))
-        
-        if i % 3 == 0:
-            keyboard.append(row)
-            row = []
-    
-    if row:
-        keyboard.append(row)
-    
-    # Add Cancel button
-    keyboard.append([
-        InlineKeyboardButton(
-            "❌ " + to_small_caps("Cancel"),
-            callback_data="smode_cancel"
-        )
-    ])
-    
+
+    # Create keyboard
+    keyboard = create_smode_keyboard(current_pref)
     reply_markup = InlineKeyboardMarkup(keyboard)
-    
+
     # Try to edit message with new photo and caption
     try:
         # Delete old message
         await query.message.delete()
-        
+
         # Send new message with smode image
         await context.bot.send_photo(
             chat_id=query.message.chat_id,
@@ -400,14 +395,14 @@ async def apply_rarity_filter(user_id: int, characters: list):
         Filtered list of characters based on user's preference
     """
     rarity_filter = await get_user_sort_preference(user_id)
-    
+
     # If no filter, return all
     if rarity_filter is None:
         return characters
-    
+
     # Filter by rarity
     filtered = [char for char in characters if char.get("rarity") == rarity_filter]
-    
+
     return filtered
 
 
