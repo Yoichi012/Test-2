@@ -535,9 +535,15 @@ class UploadHandler:
         return (
             "📤 ᴜᴘʟᴏᴀᴅ ᴄᴏᴍᴍᴀɴᴅ ᴜꜱᴀɢᴇ:\n\n"
             "ʀᴇᴘʟʏ ᴛᴏ ᴀ ᴘʜᴏᴛᴏ ᴡɪᴛʜ:\n"
-            "/upload ɴᴀᴍᴇ & ᴀɴɪᴍᴇ & ʀᴀʀɪᴛʏ\n\n"
+            "/upload\n"
+            "ᴄʜᴀʀᴀᴄᴛᴇʀ ɴᴀᴍᴇ\n"
+            "ᴀɴɪᴍᴇ\n"
+            "ʀᴀʀɪᴛʏ ɴᴜᴍʙᴇʀ\n\n"
             "ᴇxᴀᴍᴘʟᴇ:\n"
-            "/upload ɴᴇᴢᴜᴋᴏ ᴋᴀᴍᴀᴅᴏ & ᴅᴇᴍᴏɴ ꜱʟᴀʏᴇʀ & 5\n\n"
+            "/upload\n"
+            "ɴᴇᴢᴜᴋᴏ ᴋᴀᴍᴀᴅᴏ\n"
+            "ᴅᴇᴍᴏɴ ꜱʟᴀʏᴇʀ\n"
+            "5\n\n"
             f"ʀᴀʀɪᴛʏ ʟᴇᴠᴇʟꜱ:\n{rarity_list}"
         )
 
@@ -556,18 +562,18 @@ class UploadHandler:
             await update.message.reply_text(UploadHandler.format_upload_help())
             return
 
-        # Parse input
-        input_text = ' '.join(context.args)
-        parts = [p.strip() for p in input_text.split('&')]
-
-        if len(parts) != 3:
+        # Parse input - expect 3 separate arguments (name, anime, rarity)
+        if len(context.args) < 3:
             await update.message.reply_text(
                 '❌ ɪɴᴠᴀʟɪᴅ ꜰᴏʀᴍᴀᴛ!\n\n'
-                'ᴜꜱᴇ: /upload ɴᴀᴍᴇ & ᴀɴɪᴍᴇ & ʀᴀʀɪᴛʏ'
+                'ᴜꜱᴇ: /upload\nᴄʜᴀʀᴀᴄᴛᴇʀ ɴᴀᴍᴇ\nᴀɴɪᴍᴇ\nʀᴀʀɪᴛʏ ɴᴜᴍʙᴇʀ'
             )
             return
 
-        name, anime, rarity_str = parts
+        # First arg is name, second is anime, last is rarity
+        rarity_str = context.args[-1]
+        anime = context.args[-2]
+        name = ' '.join(context.args[:-2])
 
         # Validate rarity
         try:
