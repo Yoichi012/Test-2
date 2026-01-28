@@ -31,7 +31,7 @@ def to_small_caps(text: str) -> str:
         '"': '"', '&': '&', '@': '@', '#': '#', '$': '$',
         '%': '%', '^': '^', '*': '*', '+': '+', '=': '=',
         '_': '_', '|': '|', '\\': '\\', '`': '`', '~': '~',
-        '<': '<', '>': '>', ';': ';',
+        '<': '<', '>': '>', ';': ';', '\n': '\n',
         '0': '0', '1': '1', '2': '2', '3': '3', '4': '4',
         '5': '5', '6': '6', '7': '7', '8': '8', '9': '9'
     }
@@ -199,7 +199,8 @@ async def harem(update: Update, context: CallbackContext, page: int = 0) -> None
         # No characters after filtering
         if rarity_filter is not None:
             filter_name = RARITY_OPTIONS.get(str(rarity_filter), {}).get('name', 'this rarity')
-            message = to_small_caps(f'You Have No Characters of {filter_name}!\n\nUse /smode to change filter or select "All Rarities".')
+            # Convert the entire message including filter_name to small caps
+            message = f"{to_small_caps('You Have No Characters of')} {filter_name}{to_small_caps('!')}\n\n{to_small_caps('Use /smode to change filter or select')} \"{to_small_caps('All Rarities')}\"{to_small_caps('.')}"
         else:
             message = to_small_caps('You Have Not Guessed any Characters Yet..')
 
