@@ -279,7 +279,7 @@ async def send_image(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
 
     rarity_display = get_rarity_display(character)
     # Single line caption in normal font (no small caps)
-    caption = f"✨ A new {escape(rarity_display)} character appeared! Guess the character name with /guess to add them to your harem."
+    caption = f"✨ ᴀ ɴᴇᴡ {escape(rarity_display)} ᴄʜᴀʀᴀᴄᴛᴇʀ ᴀᴘᴘᴇᴀʀᴇᴅ! ɢᴜᴇꜱꜱ ᴛʜᴇ ᴄʜᴀʀᴀᴄᴛᴇʀ ɴᴀᴍᴇ ᴡɪᴛʜ /guess ᴛᴏ ᴀᴅᴅ ᴛʜᴇᴍ ᴛᴏ ʏᴏᴜʀ ʜᴀʀᴇᴍ."
 
     try:
         await context.bot.send_photo(
