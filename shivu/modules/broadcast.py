@@ -22,6 +22,22 @@ OWNER_ID = 8420981179
 broadcast_running = {'status': False, 'cancel': False}
 
 
+def to_small_caps(text: str) -> str:
+    """Convert text to small caps."""
+    mapping = {
+        'a': 'ᴀ', 'b': 'ʙ', 'c': 'ᴄ', 'd': 'ᴅ', 'e': 'ᴇ', 'f': 'ꜰ', 'g': 'ɢ', 'h': 'ʜ', 'i': 'ɪ',
+        'j': 'ᴊ', 'k': 'ᴋ', 'l': 'ʟ', 'm': 'ᴍ', 'n': 'ɴ', 'o': 'ᴏ', 'p': 'ᴘ', 'q': 'ǫ', 'r': 'ʀ',
+        's': 'ꜱ', 't': 'ᴛ', 'u': 'ᴜ', 'v': 'ᴠ', 'w': 'ᴡ', 'x': 'x', 'y': 'ʏ', 'z': 'ᴢ',
+        'A': 'ᴀ', 'B': 'ʙ', 'C': 'ᴄ', 'D': 'ᴅ', 'E': 'ᴇ', 'F': 'ꜰ', 'G': 'ɢ', 'H': 'ʜ', 'I': 'ɪ',
+        'J': 'ᴊ', 'K': 'ᴋ', 'L': 'ʟ', 'M': 'ᴍ', 'N': 'ɴ', 'O': 'ᴏ', 'P': 'ᴘ', 'Q': 'ǫ', 'R': 'ʀ',
+        'S': 'ꜱ', 'T': 'ᴛ', 'U': 'ᴜ', 'V': 'ᴠ', 'W': 'ᴡ', 'X': 'x', 'Y': 'ʏ', 'Z': 'ᴢ',
+    }
+    result = []
+    for char in text:
+        result.append(mapping.get(char, char))
+    return ''.join(result)
+
+
 def create_progress_bar(percentage: float, width: int = 10) -> str:
     """Create a visual progress bar."""
     filled = int(width * percentage / 100)
@@ -55,8 +71,8 @@ def format_time(seconds: float) -> str:
     return " ".join(parts)
 
 
-async def get_all_recipients() -> Tuple[Set[int], int]:
-    """Fetch all unique recipients from both collections."""
+async def get_all_recipients() -> Tuple[Set[int], Set[int], Set[int], int]:
+    """Fetch all unique recipients from both collections and return groups/users separately."""
     all_chats = set()
     all_users = set()
     
@@ -83,7 +99,7 @@ async def get_all_recipients() -> Tuple[Set[int], int]:
         all_recipients = all_chats.union(all_users)
         logger.info(f"📊 Total unique recipients: {len(all_recipients)}")
         
-        return all_recipients, len(all_recipients)
+        return all_recipients, all_chats, all_users, len(all_recipients)
 
     except Exception as e:
         logger.exception(f"❌ Critical error in get_all_recipients: {str(e)}")
@@ -153,7 +169,7 @@ async def broadcast(update: Update, context: CallbackContext) -> None:
 
     # Get all recipients
     try:
-        all_recipients, total_recipients = await get_all_recipients()
+        all_recipients, all_chats, all_users, total_recipients = await get_all_recipients()
 
         if total_recipients == 0:
             await processing_msg.edit_text("❌ **No recipients found in database.**")
@@ -163,6 +179,8 @@ async def broadcast(update: Update, context: CallbackContext) -> None:
         mode_text = "📋 Copy Mode" if not use_forward else "🔄 Forward Mode"
         await processing_msg.edit_text(
             f"✅ **Found {total_recipients:,} recipients**\n"
+            f"👥 **Groups:** {len(all_chats):,}\n"
+            f"💬 **Users:** {len(all_users):,}\n"
             f"🎯 **Mode:** {mode_text}\n"
             "Starting broadcast in 2 seconds..."
         )
@@ -192,6 +210,8 @@ async def broadcast(update: Update, context: CallbackContext) -> None:
         'sent': 0,
         'blocked': 0,
         'failed': 0,
+        'groups_sent': 0,
+        'users_sent': 0,
         'start_time': time.time(),
         'last_update_time': time.time(),
         'last_update_count': 0,
@@ -289,6 +309,13 @@ async def broadcast(update: Update, context: CallbackContext) -> None:
                     )
                 
                 stats['sent'] += 1
+                
+                # Track if it's a group or user
+                if chat_id in all_chats:
+                    stats['groups_sent'] += 1
+                elif chat_id in all_users:
+                    stats['users_sent'] += 1
+                
                 message_sent = True
                 logger.debug(f"✅ Sent to {chat_id}")
 
@@ -350,33 +377,14 @@ async def broadcast(update: Update, context: CallbackContext) -> None:
             # Small delay between individual messages
             await asyncio.sleep(0.05)
 
-    # Final update and summary
-    final_elapsed = time.time() - stats['start_time']
-    
-    # Prevent division by zero
-    if final_elapsed <= 0:
-        final_elapsed = 1
-
-    success_rate = (stats['sent'] / total_recipients) * 100 if total_recipients > 0 else 0
-    speed = stats['sent'] / final_elapsed if final_elapsed > 0 else 0
-
-    mode_text = "📋 Copy Mode (No Forward Tag)" if not use_forward else "🔄 Forward Mode (With Forward Tag)"
-    
+    # Final summary with small caps
     summary = (
-        f"🎉 **Broadcast Complete!**\n\n"
-        f"🎯 **Mode:** {mode_text}\n\n"
-        f"📊 **Summary**\n"
-        f"├ Total Recipients: {total_recipients:,}\n"
-        f"├ ✅ Successfully Sent: {stats['sent']:,} ({success_rate:.1f}%)\n"
-        f"├ ⛔ Blocked/Removed: {stats['blocked']:,}\n"
-        f"├ ❌ Failed: {stats['failed']:,}\n"
-        f"├ 🔄 Total Retries: {stats['retry_count']:,}\n"
-        f"├ ⏱️ Total Time: {format_time(final_elapsed)}\n"
-        f"└ 🚀 Speed: {speed:.1f} messages/sec\n\n"
-        f"💡 **Note:** Failed messages may be due to:\n"
-        f"• Deleted accounts/chats\n"
-        f"• Network issues\n"
-        f"• Invalid chat IDs"
+        f"✅ {to_small_caps('broadcast complete!')}\n\n"
+        f"📊 {to_small_caps('total send')}: {stats['sent']:,}\n"
+        f"👥 {to_small_caps('groups send')}: {stats['groups_sent']:,}\n"
+        f"💬 {to_small_caps('users dm send')}: {stats['users_sent']:,}\n"
+        f"⛔ {to_small_caps('blocked')}: {stats['blocked']:,}\n"
+        f"❌ {to_small_caps('failed')}: {stats['failed']:,}"
     )
 
     logger.info(f"🎉 Broadcast completed: {stats['sent']}/{total_recipients} sent")
