@@ -27,7 +27,7 @@ for module_name in ALL_MODULES:
     importlib.import_module("shivu.modules." + module_name)
 
 # 🔥 NEW: Import setrarity module for rarity and character lock management
-from shivu.modules import setrarity
+import shivu.modules.setrarity as setrarity
 
 # Rarity display mapping (presentation layer only - DB still stores integers)
 RARITY_MAP = {
