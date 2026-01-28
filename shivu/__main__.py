@@ -214,7 +214,7 @@ async def send_image(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
     except Exception as e:
         LOGGER.exception(f"Failed to get disabled rarities: {e}")
         disabled_rarities = []
-    
+
     # 🔥 NEW: Get locked character IDs
     try:
         locked_character_ids = await setrarity.get_locked_character_ids()
@@ -225,11 +225,11 @@ async def send_image(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
     try:
         # 🔥 OPTIMIZED: Fetch only characters with ENABLED rarities and NOT locked
         query = {}
-        
+
         # Exclude disabled rarities
         if disabled_rarities:
             query['rarity'] = {'$nin': disabled_rarities}
-        
+
         # Exclude locked characters
         if locked_character_ids:
             if 'id' in query:
@@ -239,9 +239,9 @@ async def send_image(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
                 ]
             else:
                 query['id'] = {'$nin': locked_character_ids}
-        
+
         all_characters = await collection.find(query).to_list(length=None)
-        
+
         if disabled_rarities or locked_character_ids:
             LOGGER.info(f"📊 Filtered characters: disabled_rarities={disabled_rarities}, locked_chars={len(locked_character_ids)}, available={len(all_characters)}")
     except Exception:
@@ -268,20 +268,20 @@ async def send_image(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
     if not choices:
         choices = all_characters
         sent_characters[chat_id] = []  # Reset sent list
-    
+
     # Select random character (already filtered for enabled rarity + not locked)
     character = random.choice(choices)
     LOGGER.info(f"✅ Character selected: ID={character.get('id')}, Rarity={character.get('rarity', 1)}")
-    
+
     sent_characters[chat_id].append(character.get('id'))
     last_characters[chat_id] = character
     first_correct_guesses.pop(chat_id, None)
 
     rarity_display = get_rarity_display(character)
-    caption = to_small_caps(
-        f"✨ A new {escape(rarity_display)} character appeared!\n"
-        f"✨ Guess the character name with /guess <n> to add them to your harem."
-    )
+    # Create caption with /guess not converted to small caps
+    line1 = to_small_caps(f"✨ A new {escape(rarity_display)} character appeared!")
+    line2 = to_small_caps("✨ Guess the character name with ") + "/guess" + to_small_caps(" to add them to your harem.")
+    caption = f"{line1}\n{line2}"
 
     try:
         await context.bot.send_photo(
@@ -467,7 +467,7 @@ async def fav(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 def main() -> None:
     # 🔥 NEW: Setup setrarity command handlers
     setrarity.setup_handlers()
-    
+
     # Existing handlers
     application.add_handler(CommandHandler(["guess", "protecc", "collect", "grab", "hunt"], guess, block=False))
     application.add_handler(CommandHandler("fav", fav, block=False))
