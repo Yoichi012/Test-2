@@ -26,6 +26,9 @@ from shivu.modules.leaderboard import update_daily_user_guess, update_daily_grou
 for module_name in ALL_MODULES:
     importlib.import_module("shivu.modules." + module_name)
 
+# 🔥 NEW: Import setrarity module for rarity and character lock management
+from shivu.modules import setrarity
+
 # Rarity display mapping (presentation layer only - DB still stores integers)
 RARITY_MAP = {
     1: "⚪ ᴄᴏᴍᴍᴏɴ",
@@ -49,6 +52,7 @@ RARITY_MAP = {
 SPAM_REPEAT_THRESHOLD = 10
 SPAM_IGNORE_SECONDS = 10 * 60
 DEFAULT_MESSAGE_FREQUENCY = 100
+MAX_SPAWN_ATTEMPTS = 10  # 🔥 NEW: Maximum attempts to find a spawnable character
 
 # In-memory runtime state
 locks: Dict[str, asyncio.Lock] = {}
@@ -225,11 +229,39 @@ async def send_image(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
     choices = [c for c in all_characters if c.get('id') not in sent_characters[chat_id]]
     if not choices:
         choices = all_characters
-    character = random.choice(choices)
+    
+    # 🔥 NEW: Try to find a spawnable character (max attempts to avoid infinite loop)
+    character = None
+    for attempt in range(MAX_SPAWN_ATTEMPTS):
+        temp_character = random.choice(choices)
+        
+        # Check if character can spawn (rarity enabled + not locked)
+        character_id = temp_character.get('id')
+        character_rarity = temp_character.get('rarity', 1)
+        
+        can_spawn, reason = await setrarity.can_character_spawn(
+            character_id=character_id,
+            rarity=character_rarity,
+            chat_id=chat_id
+        )
+        
+        if can_spawn:
+            character = temp_character
+            LOGGER.info(f"✅ Character {character_id} selected for spawn (attempt {attempt + 1})")
+            break
+        else:
+            LOGGER.info(f"⚠️ Attempt {attempt + 1}: Character {character_id} blocked - {reason}")
+            # Remove from choices to avoid picking same character again
+            choices = [c for c in choices if c.get('id') != character_id]
+            if not choices:
+                LOGGER.warning(f"No more valid choices available after {attempt + 1} attempts")
+                break
+    
+    # If no valid character found after all attempts, don't spawn
     if not character:
-        LOGGER.error("No character chosen from collection")
+        LOGGER.warning(f"❌ Failed to find spawnable character in chat {chat_id} after {MAX_SPAWN_ATTEMPTS} attempts")
         return
-
+    
     sent_characters[chat_id].append(character.get('id'))
     last_characters[chat_id] = character
     first_correct_guesses.pop(chat_id, None)
@@ -237,7 +269,7 @@ async def send_image(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
     rarity_display = get_rarity_display(character)
     caption = to_small_caps(
         f"✨ A new {escape(rarity_display)} character appeared!\n"
-        f"✨ Guess the character name with /guess <name> to add them to your harem."
+        f"✨ Guess the character name with /guess <n> to add them to your harem."
     )
 
     try:
@@ -288,7 +320,7 @@ async def guess(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         # 🔥 FIXED: Update balance in user_collection directly
         try:
             await _update_user_info(user_id, update.effective_user)
-            
+
             await user_collection.update_one(
                 {'id': user_id},
                 {'$inc': {'balance': 100}},
@@ -422,6 +454,10 @@ async def fav(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         await update.message.reply_text(to_small_caps("Failed to mark favorite. Please try again later."))
 
 def main() -> None:
+    # 🔥 NEW: Setup setrarity command handlers
+    setrarity.setup_handlers()
+    
+    # Existing handlers
     application.add_handler(CommandHandler(["guess", "protecc", "collect", "grab", "hunt"], guess, block=False))
     application.add_handler(CommandHandler("fav", fav, block=False))
     application.add_handler(MessageHandler(filters.ALL, message_counter, block=False))
