@@ -15,10 +15,10 @@ claim_codes_collection = db.claim_codes
 
 # Configuration
 ALLOWED_GROUP_ID = -1003317636069
-SUPPORT_GROUP = "https://https://t.me/+w5eHmvmE_GdlNGVl"
+SUPPORT_GROUP = "https://t.me/xjjdjdjdhe"
 SUPPORT_CHANNEL = "https://t.me/Senpai_Updates"
 SUPPORT_GROUP_ID = "@THE_DRAGON_SUPPORT"
-SUPPORT_CHANNEL_ID = "https://t.me/+w5eHmvmE_GdlNGVl"
+SUPPORT_CHANNEL_ID = "@xjjdjdjdhe"
 
 # Allowed rarities for sclaim (2=Rare, 3=Legendary, 4=Special)
 ALLOWED_RARITIES = [2, 3, 4]
