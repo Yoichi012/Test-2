@@ -214,12 +214,14 @@ class Character:
         display_name = rarity_obj.display_name if rarity_obj else f"Level {self.rarity}"
 
         return (
-            f"✦ ᴄʜᴀʀᴀᴄᴛᴇʀ ᴅᴇᴛᴀɪʟ ✦\n\n"
+            f"✦ ᴄʜᴀʀᴀᴄᴛᴇʀ ᴅᴇᴛᴀɪʟ ✦\n"
+            f"▬▬▬▬▬▬▬▬▬▬▬▬▬▬\n"
             f"✧ 🌸  ɴᴀᴍᴇ     : {self.name}\n"
             f"✧ 📺  ᴀɴɪᴍᴇ    : {self.anime}\n"
             f"✧ 💫  ʀᴀʀɪᴛʏ   : {display_name}\n"
-            f"✧  🆔  ɪᴅ       : {self.character_id}\n\n"
-            f"✦   ᴍᴀᴅᴇ ʙʏ : {self.uploader_name}"
+            f"✧ 🆔  ɪᴅ       : {self.character_id}\n"
+            f"▬▬▬▬▬▬▬▬▬▬▬▬▬▬\n"
+            f"✦  ᴍᴀᴅᴇ ʙʏ : {self.uploader_name}"
         )
 
 
