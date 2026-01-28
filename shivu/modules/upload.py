@@ -62,7 +62,7 @@ async def get_next_sequence_number(sequence_name):
     """
     sequence_collection = db.sequences
     max_attempts = 200
-    
+
     for attempt in range(max_attempts):
         # Get or create sequence
         sequence_document = await sequence_collection.find_one_and_update(
@@ -70,45 +70,50 @@ async def get_next_sequence_number(sequence_name):
             {'$inc': {'sequence_value': 1}}, 
             return_document=ReturnDocument.AFTER
         )
-        
+
         if not sequence_document:
             # Initialize sequence if not exists
             await sequence_collection.insert_one({'_id': sequence_name, 'sequence_value': 1})
             sequence_value = 1
         else:
             sequence_value = sequence_document['sequence_value']
-        
+
         # Format ID with leading zeros
         new_id = str(sequence_value).zfill(2)
-        
+
         # Check if this ID already exists in collection
         existing = await collection.find_one({'id': new_id})
-        
+
         if not existing:
             # Found unique ID
             return sequence_value
-        
+
         # ID exists, continue loop to try next number
         print(f"⚠️ ID {new_id} already exists, trying next...")
-    
+
     # If we exhausted all attempts
     raise Exception(f"❌ Unable to generate unique character ID after {max_attempts} attempts. Database needs cleanup.")
 
 
 async def upload_to_catbox(file_path):
-    """Upload image to Catbox with improved error handling"""
+    """
+    Upload image to Catbox with improved error handling
+    Ensures ClientSession is always properly closed
+    """
+    session = None
     try:
         import aiohttp
         import aiofiles
-        
+
         async with aiofiles.open(file_path, 'rb') as f:
             file_data = await f.read()
-        
-        async with aiohttp.ClientSession() as session:
+
+        session = aiohttp.ClientSession()
+        try:
             form = aiohttp.FormData()
             form.add_field('reqtype', 'fileupload')
             form.add_field('fileToUpload', file_data, filename='image.jpg')
-            
+
             async with session.post(
                 'https://catbox.moe/user/api.php', 
                 data=form, 
@@ -119,27 +124,42 @@ async def upload_to_catbox(file_path):
                     if url.startswith('https://'):
                         print(f"✅ Catbox upload successful: {url}")
                         return url.strip()
-        return None
+            return None
+        finally:
+            await session.close()
+    except asyncio.CancelledError:
+        # Handle task cancellation gracefully
+        if session and not session.closed:
+            await session.close()
+        print("⚠️ Catbox upload cancelled")
+        raise
     except Exception as e:
+        if session and not session.closed:
+            await session.close()
         print(f"❌ Catbox upload error: {e}")
         return None
 
 
 async def upload_to_telegraph(file_path):
-    """Upload image to Telegraph with SSL fallback"""
+    """
+    Upload image to Telegraph with SSL fallback
+    Ensures ClientSession is always properly closed
+    """
+    session = None
     try:
         import aiohttp
         import aiofiles
-        
+
         async with aiofiles.open(file_path, 'rb') as f:
             file_data = await f.read()
-        
+
         # Try with normal SSL first
         try:
-            async with aiohttp.ClientSession() as session:
+            session = aiohttp.ClientSession()
+            try:
                 form = aiohttp.FormData()
                 form.add_field('file', file_data, filename='image.jpg', content_type='image/jpeg')
-                
+
                 async with session.post(
                     'https://telegra.ph/upload', 
                     data=form, 
@@ -151,16 +171,20 @@ async def upload_to_telegraph(file_path):
                             url = f"https://telegra.ph{data[0]['src']}"
                             print(f"✅ Telegraph upload successful: {url}")
                             return url
+            finally:
+                await session.close()
+                session = None
         except Exception as ssl_error:
             print(f"⚠️ Telegraph SSL error: {ssl_error}, trying without SSL verification...")
-            
+
             # Fallback: Try without SSL verification
             try:
                 connector = aiohttp.TCPConnector(ssl=False)
-                async with aiohttp.ClientSession(connector=connector) as session:
+                session = aiohttp.ClientSession(connector=connector)
+                try:
                     form = aiohttp.FormData()
                     form.add_field('file', file_data, filename='image.jpg', content_type='image/jpeg')
-                    
+
                     async with session.post(
                         'https://telegra.ph/upload', 
                         data=form, 
@@ -172,31 +196,47 @@ async def upload_to_telegraph(file_path):
                                 url = f"https://telegra.ph{data[0]['src']}"
                                 print(f"✅ Telegraph upload successful (no SSL): {url}")
                                 return url
+                finally:
+                    await session.close()
+                    session = None
             except Exception as e:
                 print(f"❌ Telegraph fallback also failed: {e}")
-        
+
         return None
+    except asyncio.CancelledError:
+        # Handle task cancellation gracefully
+        if session and not session.closed:
+            await session.close()
+        print("⚠️ Telegraph upload cancelled")
+        raise
     except Exception as e:
+        if session and not session.closed:
+            await session.close()
         print(f"❌ Telegraph upload error: {e}")
         return None
 
 
 async def upload_to_imgur(file_path):
-    """Upload image to Imgur"""
+    """
+    Upload image to Imgur
+    Ensures ClientSession is always properly closed
+    """
+    session = None
     try:
         import aiohttp
         import aiofiles
         import base64
-        
+
         async with aiofiles.open(file_path, 'rb') as f:
             file_data = await f.read()
-        
+
         b64_image = base64.b64encode(file_data).decode('utf-8')
-        
-        async with aiohttp.ClientSession() as session:
+
+        session = aiohttp.ClientSession()
+        try:
             headers = {'Authorization': 'Client-ID 546c25a59c58ad7'}
             data = {'image': b64_image, 'type': 'base64'}
-            
+
             async with session.post(
                 'https://api.imgur.com/3/image', 
                 headers=headers, 
@@ -209,8 +249,18 @@ async def upload_to_imgur(file_path):
                         url = json_data['data']['link']
                         print(f"✅ Imgur upload successful: {url}")
                         return url
-        return None
+            return None
+        finally:
+            await session.close()
+    except asyncio.CancelledError:
+        # Handle task cancellation gracefully
+        if session and not session.closed:
+            await session.close()
+        print("⚠️ Imgur upload cancelled")
+        raise
     except Exception as e:
+        if session and not session.closed:
+            await session.close()
         print(f"❌ Imgur upload error: {e}")
         return None
 
@@ -218,74 +268,112 @@ async def upload_to_imgur(file_path):
 async def get_image_url_from_reply(message, context):
     """
     Get image URL from replied message using multiple upload services
-    Uses race condition - first successful upload wins, others are cancelled
+    Uses asyncio.wait with FIRST_COMPLETED for race condition
+    Properly handles task cancellation and cleanup
     """
-    if not message.reply_to_message or not message.reply_to_message.photo:
-        return None
-    
     try:
-        # Get the largest photo
+        if not message.reply_to_message or not message.reply_to_message.photo:
+            return None
+
+        # Download photo
         photo = message.reply_to_message.photo[-1]
         file = await context.bot.get_file(photo.file_id)
         file_path = f"/tmp/{photo.file_id}.jpg"
         await file.download_to_drive(file_path)
-        
-        print("📤 Starting parallel uploads to Catbox, Telegraph, and Imgur...")
-        
-        # Create tasks for all upload services
-        tasks = [
+
+        print("📤 Starting parallel uploads to multiple services...")
+
+        # Create upload tasks - but don't use create_task yet
+        # We'll let asyncio.wait handle them properly
+        upload_tasks = {
             asyncio.create_task(upload_to_catbox(file_path)),
             asyncio.create_task(upload_to_telegraph(file_path)),
             asyncio.create_task(upload_to_imgur(file_path))
-        ]
-        
-        # Wait for first successful upload
-        img_url = None
-        for task in asyncio.as_completed(tasks):
-            result = await task
-            if result:
-                img_url = result
-                print(f"🎉 First upload completed! Using: {img_url}")
-                # Cancel remaining tasks
-                for t in tasks:
-                    if not t.done():
-                        t.cancel()
-                        print("🚫 Cancelled remaining upload task")
-                break
-        
-        # Clean up temporary file
+        }
+
+        result_url = None
+
         try:
-            os.remove(file_path)
-        except:
-            pass
-        
-        return img_url
-        
+            # Wait for first successful completion
+            while upload_tasks and result_url is None:
+                done, pending = await asyncio.wait(
+                    upload_tasks, 
+                    return_when=asyncio.FIRST_COMPLETED
+                )
+
+                # Check completed tasks
+                for task in done:
+                    try:
+                        url = task.result()
+                        if url:
+                            result_url = url
+                            print(f"🎯 First successful upload: {result_url}")
+                            break
+                    except Exception as e:
+                        print(f"⚠️ Upload task failed: {e}")
+
+                # Update pending tasks set
+                upload_tasks = pending
+
+                # If we got a result, break
+                if result_url:
+                    break
+
+            # Cancel all remaining tasks
+            if upload_tasks:
+                print(f"🛑 Cancelling {len(upload_tasks)} remaining upload tasks...")
+                for task in upload_tasks:
+                    task.cancel()
+
+                # Wait for all cancelled tasks to complete cleanup
+                if upload_tasks:
+                    await asyncio.gather(*upload_tasks, return_exceptions=True)
+
+        except Exception as e:
+            print(f"❌ Error during parallel upload: {e}")
+            # Cancel all tasks on error
+            for task in upload_tasks:
+                if not task.done():
+                    task.cancel()
+            # Wait for cancellation to complete
+            if upload_tasks:
+                await asyncio.gather(*upload_tasks, return_exceptions=True)
+            raise
+
+        # Clean up downloaded file
+        try:
+            if os.path.exists(file_path):
+                os.remove(file_path)
+        except Exception as e:
+            print(f"⚠️ Failed to remove temp file: {e}")
+
+        if result_url:
+            return result_url
+        else:
+            print("❌ All upload services failed")
+            return None
+
     except Exception as e:
-        print(f"❌ Error getting image URL: {e}")
+        print(f"❌ Error in get_image_url_from_reply: {e}")
         return None
 
 
-def format_channel_caption(character_id, character_name, anime_name, rarity, user_first_name, user_id):
-    """Format caption for channel message in new style"""
-    # Extract rarity emoji and name
-    rarity_parts = rarity.split(' ', 1)
-    rarity_emoji = rarity_parts[0] if len(rarity_parts) > 0 else ""
-    rarity_name = rarity_parts[1] if len(rarity_parts) > 1 else rarity
-    
-    caption = f"""<b>{character_id}:</b> {character_name}
-{anime_name}
-{rarity_emoji} 𝙍𝘼𝙍𝙄𝙏𝙔: {rarity_name}
-
-𝑴𝒂𝒅𝒆 𝑩𝒚 ➥ <a href="tg://user?id={user_id}">{user_first_name}</a>"""
-    
-    return caption
+def format_channel_caption(char_id, name, anime, rarity, uploader_name, uploader_id):
+    """Format caption for channel message"""
+    return (
+        f'<b>CHARACTER ADDED!</b>\n\n'
+        f'🆔 <b>ID:</b> {char_id}\n'
+        f'👤 <b>Name:</b> {name}\n'
+        f'📺 <b>Anime:</b> {anime}\n'
+        f'⭐ <b>Rarity:</b> {rarity}\n\n'
+        f'➕ <b>Added by:</b> <a href="tg://user?id={uploader_id}">{uploader_name}</a>'
+    )
 
 
 async def upload(update: Update, context: CallbackContext) -> None:
-    """Upload new character - Reply to image with character details"""
+    """Upload a new character (reply to image)"""
     if str(update.effective_user.id) not in sudo_users:
-        await update.message.reply_text('❌ Ask My Owner...')
+        await update.message.reply_text('❌ Ask my Owner to use this Command...')
         return
 
     try:
@@ -294,43 +382,39 @@ async def upload(update: Update, context: CallbackContext) -> None:
             await update.message.reply_text(WRONG_FORMAT_TEXT)
             return
 
-        # Check if message is a reply to an image
         if not update.message.reply_to_message or not update.message.reply_to_message.photo:
             await update.message.reply_text('❌ Please reply to an image with the upload command.')
             return
 
+        # Parse arguments
         character_name = args[0].replace('-', ' ').title()
         anime = args[1].replace('-', ' ').title()
 
-        # Validate rarity
         try:
             rarity_num = int(args[2])
             if rarity_num not in RARITY_MAP:
-                await update.message.reply_text(f'❌ Invalid rarity. Please use 1-15.')
+                await update.message.reply_text('❌ Invalid rarity. Please use 1-15.')
                 return
             rarity = RARITY_MAP[rarity_num]
-        except (ValueError, KeyError):
+        except ValueError:
             await update.message.reply_text('❌ Invalid rarity. Please use 1-15.')
             return
 
-        # Send processing message
-        processing_msg = await update.message.reply_text('⏳ Processing...\n📤 Uploading image to cloud services...')
+        # Start processing
+        processing_msg = await update.message.reply_text('⏳ Processing character upload...')
 
-        # Get image URL from reply using multiple services
+        # Get image URL
+        await processing_msg.edit_text('⏳ Uploading image to cloud services...')
         img_url = await get_image_url_from_reply(update.message, context)
-        
+
         if not img_url:
-            await processing_msg.edit_text('❌ Failed to upload image to cloud services (all services failed).\n\n💡 Please try again or check your internet connection.')
+            await processing_msg.edit_text('❌ Failed to upload image to any cloud service. Please try again.')
             return
 
-        await processing_msg.edit_text(f'✅ Image uploaded successfully!\n🔗 URL: {img_url}\n\n⏳ Generating unique character ID...')
-
-        # Get unique character ID (handles duplicates automatically)
-        try:
-            id = str(await get_next_sequence_number('character_id')).zfill(2)
-        except Exception as e:
-            await processing_msg.edit_text(f'❌ Failed to generate character ID: {str(e)}')
-            return
+        # Get unique character ID
+        await processing_msg.edit_text('⏳ Generating character ID...')
+        sequence_value = await get_next_sequence_number('character_id')
+        id = str(sequence_value).zfill(2)
 
         # Create character document
         character = {
@@ -341,12 +425,12 @@ async def upload(update: Update, context: CallbackContext) -> None:
             'id': id
         }
 
+        # Get photo file_id for channel upload
+        photo_file_id = update.message.reply_to_message.photo[-1].file_id
+
         try:
-            # Use Telegram file_id for fast upload to channel
-            photo_file_id = update.message.reply_to_message.photo[-1].file_id
-            
             await processing_msg.edit_text(f'✅ Character ID: {id}\n⏳ Uploading to channel...')
-            
+
             # Send to channel using file_id
             message = await context.bot.send_photo(
                 chat_id=CHARA_CHANNEL_ID,
@@ -361,12 +445,12 @@ async def upload(update: Update, context: CallbackContext) -> None:
                 ),
                 parse_mode='HTML'
             )
-            
+
             character['message_id'] = message.message_id
-            
+
             # Insert into database
             await collection.insert_one(character)
-            
+
             await processing_msg.edit_text(
                 f'✅ <b>CHARACTER ADDED SUCCESSFULLY!</b>\n\n'
                 f'🆔 <b>ID:</b> {id}\n'
@@ -376,7 +460,7 @@ async def upload(update: Update, context: CallbackContext) -> None:
                 f'🔗 <b>Image URL:</b> {img_url}',
                 parse_mode='HTML'
             )
-            
+
         except Exception as e:
             # If channel upload fails, still save to database
             await collection.insert_one(character)
@@ -418,7 +502,7 @@ async def delete(update: Update, context: CallbackContext) -> None:
                 await update.message.reply_text(f'✅ Character ID {args[0]} deleted from database.\n⚠️ Could not delete from channel (message may already be deleted).')
         else:
             await update.message.reply_text(f'❌ Character ID {args[0]} not found in database.')
-            
+
     except Exception as e:
         await update.message.reply_text(f'❌ Error: {str(e)}')
 
@@ -455,7 +539,7 @@ async def update(update: Update, context: CallbackContext) -> None:
         # Process new value based on field type
         if args[1] in ['name', 'anime']:
             new_value = args[2].replace('-', ' ').title()
-            
+
         elif args[1] == 'rarity':
             try:
                 rarity_num = int(args[2])
@@ -466,17 +550,17 @@ async def update(update: Update, context: CallbackContext) -> None:
             except (ValueError, KeyError):
                 await update.message.reply_text('❌ Invalid rarity. Please use 1-15.')
                 return
-                
+
         elif args[1] == 'img_url':
             # Check if reply to image
             if update.message.reply_to_message and update.message.reply_to_message.photo:
                 processing_msg = await update.message.reply_text('⏳ Uploading new image to cloud services...')
                 new_value = await get_image_url_from_reply(update.message, context)
-                
+
                 if not new_value:
                     await processing_msg.edit_text('❌ Failed to upload image. Please try again.')
                     return
-                    
+
                 await processing_msg.edit_text(f'✅ Image uploaded: {new_value}')
             else:
                 new_value = args[2]
@@ -493,7 +577,7 @@ async def update(update: Update, context: CallbackContext) -> None:
                 updated_name = character.get('name', 'Unknown')
                 updated_anime = character.get('anime', 'Unknown')
                 updated_rarity = character.get('rarity', '⚪ ᴄᴏᴍᴍᴏɴ')
-                
+
                 new_caption = format_channel_caption(
                     character['id'],
                     updated_name,
@@ -502,7 +586,7 @@ async def update(update: Update, context: CallbackContext) -> None:
                     update.effective_user.first_name,
                     update.effective_user.id
                 )
-                
+
                 await context.bot.edit_message_media(
                     chat_id=CHARA_CHANNEL_ID,
                     message_id=character['message_id'],
@@ -512,13 +596,13 @@ async def update(update: Update, context: CallbackContext) -> None:
                         parse_mode='HTML'
                     )
                 )
-                
+
             else:
                 # For other fields, just update caption
                 updated_name = new_value if args[1] == 'name' else character.get('name', 'Unknown')
                 updated_anime = new_value if args[1] == 'anime' else character.get('anime', 'Unknown')
                 updated_rarity = new_value if args[1] == 'rarity' else character.get('rarity', '⚪ ᴄᴏᴍᴍᴏɴ')
-                
+
                 new_caption = format_channel_caption(
                     character['id'],
                     updated_name,
@@ -527,7 +611,7 @@ async def update(update: Update, context: CallbackContext) -> None:
                     update.effective_user.first_name,
                     update.effective_user.id
                 )
-                
+
                 await context.bot.edit_message_caption(
                     chat_id=CHARA_CHANNEL_ID,
                     message_id=character['message_id'],
@@ -543,7 +627,7 @@ async def update(update: Update, context: CallbackContext) -> None:
                 f'💾 Database and channel both updated.',
                 parse_mode='HTML'
             )
-            
+
         except Exception as e:
             await update.message.reply_text(
                 f'✅ Database updated successfully.\n'
@@ -555,12 +639,13 @@ async def update(update: Update, context: CallbackContext) -> None:
         await update.message.reply_text(f'❌ Update failed: {str(e)}')
 
 
-# Register handlers
-UPLOAD_HANDLER = CommandHandler('upload', upload, block=False)
+# Register handlers with block=True for heavy commands (FIXED)
+# This prevents event loop closure issues during shutdown
+UPLOAD_HANDLER = CommandHandler('upload', upload, block=True)
 application.add_handler(UPLOAD_HANDLER)
 
-DELETE_HANDLER = CommandHandler('delete', delete, block=False)
+DELETE_HANDLER = CommandHandler('delete', delete, block=True)
 application.add_handler(DELETE_HANDLER)
 
-UPDATE_HANDLER = CommandHandler('update', update, block=False)
+UPDATE_HANDLER = CommandHandler('update', update, block=True)
 application.add_handler(UPDATE_HANDLER)
