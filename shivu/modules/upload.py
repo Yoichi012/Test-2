@@ -2,7 +2,7 @@ import asyncio
 import os
 from pymongo import ReturnDocument
 import aiohttp
-from contextlib import asynccontextmanager
+import base64
 
 from telegram import Update, InputMediaPhoto
 from telegram.ext import CommandHandler, CallbackContext
@@ -54,7 +54,7 @@ Rarity Map (1-15):
 12: 🌸 ꜱᴘʀɪɴɢ
 13: 🏖️ ᴛʀᴏᴘɪᴄᴀʟ
 14: 🍭 ᴋᴀᴡᴀɪɪ
-15: 🧬 ʜʏʤʀɪᴅ"""
+15: 🧬 ʜʏʙʀɪᴅ"""
 
 
 # ==================== SHARED SESSION MANAGEMENT ====================
@@ -174,8 +174,6 @@ async def upload_to_telegraph(file_path, session, use_ssl=True):
 async def upload_to_imgur(file_path, session):
     """Upload image to Imgur - using streaming"""
     try:
-        import base64
-        
         # Still need to read fully for Imgur's base64 requirement
         with open(file_path, 'rb') as f:
             file_data = f.read()
@@ -233,7 +231,6 @@ async def get_image_url_from_reply(message, context):
         # Try SSL version first, then fallback if needed
         img_url = None
         
-        # Use asyncio.wait to get first completed
         try:
             # Create tasks from coroutines
             upload_tasks = [asyncio.create_task(coro) for coro in upload_coros]
@@ -263,6 +260,7 @@ async def get_image_url_from_reply(message, context):
                 try:
                     await asyncio.wait(pending, timeout=2)
                 except asyncio.TimeoutError:
+                    # Ignore timeout - tasks were cancelled
                     pass
         
         except Exception as e:
@@ -581,18 +579,17 @@ async def update(update: Update, context: CallbackContext) -> None:
         await update.message.reply_text(f'❌ Update failed: {str(e)}')
 
 
-# ==================== APPLICATION LIFECYCLE MANAGEMENT ====================
-async def on_startup(application):
-    """Initialize resources on bot startup"""
-    print("🤖 Bot starting up...")
-    # Session will be created on first use via SessionManager
+# ==================== LIFECYCLE MANAGEMENT ====================
+async def on_startup():
+    """Initialize resources on bot startup - call this from your main file"""
+    print("🤖 Upload module initialized")
 
 
-async def on_shutdown(application):
-    """Clean up resources on bot shutdown"""
-    print("🛑 Bot shutting down...")
+async def on_shutdown():
+    """Clean up resources on bot shutdown - call this from your main file"""
+    print("🛑 Upload module shutting down...")
     await SessionManager.close_session()
-    print("✅ Clean shutdown completed")
+    print("✅ Upload module cleanup completed")
 
 
 # Register handlers with block=True for heavy commands
@@ -604,11 +601,3 @@ application.add_handler(DELETE_HANDLER)
 
 UPDATE_HANDLER = CommandHandler('update', update, block=True)
 application.add_handler(UPDATE_HANDLER)
-
-# Register lifecycle handlers
-application.add_handler(telegram.ext.CallbackQueryHandler(None))  # Placeholder for actual handlers
-application.run_polling(
-    on_startup=on_startup,
-    on_shutdown=on_shutdown,
-    close_loop=False
-)
