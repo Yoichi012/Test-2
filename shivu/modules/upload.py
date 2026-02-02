@@ -1,5 +1,6 @@
 import urllib.request
 import logging
+import re
 from pymongo import ReturnDocument
 from telegram import Update, InputMediaPhoto
 from telegram.ext import CommandHandler, CallbackContext
@@ -37,6 +38,14 @@ img_url character-name anime-name rarity-number
 
 use rarity number accordingly rarity Map
 
+Supported Image URLs:
+✅ Direct image links (.jpg, .png, .jpeg, .gif, .webp)
+✅ Catbox.moe links
+✅ Telegraph links (telegra.ph, graph.org)
+✅ ImgBB, Imgur, Postimages
+✅ Google Drive (direct links)
+✅ And many more!
+
 """ + "\n".join([f"{k}: {v[1]}" for k, v in RARITY_MAP.items()])
 
 def is_sudo(user_id: int) -> bool:
@@ -53,13 +62,120 @@ def validate_rarity(rarity_input: str) -> tuple:
         error_msg = "Rarity must be a number! Use 1-15.\n\n" + "\n".join([f"{k}: {v[1]}" for k, v in RARITY_MAP.items()])
         return None, error_msg
 
+def normalize_image_url(url: str) -> str:
+    """
+    Convert various image hosting URLs to direct image URLs
+    Supports: Catbox, Telegraph, ImgBB, Imgur, Postimages, Google Drive, etc.
+    """
+    if not url:
+        return url
+    
+    url = url.strip()
+    
+    # Catbox.moe - already direct links, just ensure proper format
+    if 'catbox.moe' in url or 'files.catbox.moe' in url:
+        if not url.startswith('http'):
+            url = 'https://' + url
+        return url
+    
+    # Telegraph - convert to direct image URL
+    if 'telegra.ph' in url or 'graph.org' in url:
+        if not url.startswith('http'):
+            url = 'https://' + url
+        # Telegraph URLs are already direct image links
+        return url
+    
+    # ImgBB - extract direct image URL
+    if 'ibb.co' in url or 'imgbb.com' in url:
+        if '/image/' in url:
+            # Try to get direct link by adding proper extension
+            return url
+        return url
+    
+    # Imgur - convert to direct image URL
+    if 'imgur.com' in url:
+        if not url.startswith('http'):
+            url = 'https://' + url
+        # Convert imgur.com/xxxxx to i.imgur.com/xxxxx.jpg
+        if 'i.imgur.com' not in url:
+            img_id = url.split('/')[-1].split('.')[0]
+            ext = url.split('.')[-1] if '.' in url.split('/')[-1] else 'jpg'
+            url = f'https://i.imgur.com/{img_id}.{ext}'
+        return url
+    
+    # Postimages - convert to direct link
+    if 'postimages.org' in url or 'postimg.cc' in url:
+        if not url.startswith('http'):
+            url = 'https://' + url
+        # Postimages direct links usually work as-is
+        return url
+    
+    # Google Drive - convert to direct download link
+    if 'drive.google.com' in url:
+        if '/file/d/' in url:
+            file_id = url.split('/file/d/')[1].split('/')[0]
+            url = f'https://drive.google.com/uc?export=download&id={file_id}'
+        elif 'id=' in url:
+            file_id = url.split('id=')[1].split('&')[0]
+            url = f'https://drive.google.com/uc?export=download&id={file_id}'
+        return url
+    
+    # Default: return as-is (for direct image URLs)
+    if not url.startswith('http'):
+        url = 'https://' + url
+    
+    return url
+
 def validate_image_url(url: str) -> bool:
+    """
+    Validate if URL is accessible and is an image
+    Now supports more image hosting services
+    """
     if not url:
         return False
+    
     try:
-        urllib.request.urlopen(url)
-        return True
-    except:
+        # Normalize URL first
+        normalized_url = normalize_image_url(url)
+        
+        # List of trusted image hosting domains that we allow without strict validation
+        trusted_domains = [
+            'catbox.moe', 'files.catbox.moe',
+            'telegra.ph', 'graph.org',
+            'imgur.com', 'i.imgur.com',
+            'ibb.co', 'i.ibb.co', 'imgbb.com',
+            'postimages.org', 'postimg.cc', 'i.postimg.cc',
+            'drive.google.com'
+        ]
+        
+        # Check if URL contains trusted domain
+        for domain in trusted_domains:
+            if domain in normalized_url:
+                return True
+        
+        # For other URLs, try to validate by opening
+        req = urllib.request.Request(
+            normalized_url,
+            headers={'User-Agent': 'Mozilla/5.0'}
+        )
+        
+        with urllib.request.urlopen(req, timeout=10) as response:
+            content_type = response.headers.get('Content-Type', '')
+            # Check if content type is image
+            if 'image' in content_type.lower():
+                return True
+            # Some services don't set proper content-type, check URL extension
+            if normalized_url.lower().endswith(('.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp')):
+                return True
+        
+        return False
+        
+    except Exception as e:
+        logger.warning(f"URL validation warning for {url}: {e}")
+        # If it's a trusted domain but validation failed, still allow it
+        for domain in trusted_domains:
+            if domain in url:
+                return True
         return False
 
 def build_caption(char_id: str, char_name: str, anime: str, rarity_display: str, uploader_id: int, uploader_name: str) -> str:
@@ -100,8 +216,20 @@ async def upload(update: Update, context: CallbackContext) -> None:
         character_name = args[1].replace('-', ' ').title()
         anime = args[2].replace('-', ' ').title()
 
-        if not validate_image_url(img_url):
-            await update.message.reply_text('Invalid URL.')
+        # Normalize the image URL (convert catbox, telegraph, etc. to proper format)
+        normalized_url = normalize_image_url(img_url)
+        
+        if not validate_image_url(normalized_url):
+            await update.message.reply_text(
+                '❌ Invalid URL.\n\n'
+                'Supported formats:\n'
+                '✅ Catbox.moe\n'
+                '✅ Telegraph (telegra.ph)\n'
+                '✅ ImgBB, Imgur, Postimages\n'
+                '✅ Direct image links\n'
+                '✅ Google Drive (direct links)\n\n'
+                'Please provide a valid image URL.'
+            )
             return
 
         rarity_data, error_msg = validate_rarity(args[3])
@@ -113,7 +241,7 @@ async def upload(update: Update, context: CallbackContext) -> None:
         char_id = str(await get_next_sequence_number('character_id')).zfill(2)
 
         character = {
-            'img_url': img_url,
+            'img_url': normalized_url,  # Store normalized URL
             'name': character_name,
             'anime': anime,
             'rarity': rarity_display,
@@ -132,13 +260,13 @@ async def upload(update: Update, context: CallbackContext) -> None:
         try:
             message = await context.bot.send_photo(
                 chat_id=CHARA_CHANNEL_ID,
-                photo=img_url,
+                photo=normalized_url,
                 caption=caption,
                 parse_mode='HTML'
             )
             character['message_id'] = message.message_id
             await collection.insert_one(character)
-            await update.message.reply_text('CHARACTER ADDED....')
+            await update.message.reply_text('✅ CHARACTER ADDED....')
         except Exception as channel_error:
             logger.error(f"Channel upload error: {channel_error}")
             await collection.insert_one(character)
@@ -210,6 +338,12 @@ async def update(update: Update, context: CallbackContext) -> None:
                 return
             rarity_num, rarity_display = rarity_data
             new_value = rarity_display
+        elif args[1] == 'img_url':
+            # Normalize the new image URL
+            new_value = normalize_image_url(args[2])
+            if not validate_image_url(new_value):
+                await update.message.reply_text('❌ Invalid image URL. Please provide a valid URL from supported sources.')
+                return
         else:
             new_value = args[2]
 
